@@ -1,0 +1,542 @@
+[
+ {
+  "scenario": "S1 switch tools",
+  "step": "idle",
+  "expected": [],
+  "got": [],
+  "ok": true
+ },
+ {
+  "scenario": "S1 switch tools",
+  "step": "2 Points",
+  "expected": [
+   "DrawLine"
+  ],
+  "got": [
+   "DrawLine"
+  ],
+  "ok": true
+ },
+ {
+  "scenario": "S1 switch tools",
+  "step": "Angle",
+  "expected": [
+   "DrawLineAngle"
+  ],
+  "got": [
+   "DrawLine",
+   "DrawLineAngle"
+  ],
+  "ok": false
+ },
+ {
+  "scenario": "S1 switch tools",
+  "step": "Horizontal",
+  "expected": [
+   "DrawLineHorizontal"
+  ],
+  "got": [
+   "DrawLine",
+   "DrawLineAngle",
+   "DrawLineHorizontal"
+  ],
+  "ok": false
+ },
+ {
+  "scenario": "S1 switch tools",
+  "step": "Escape: Horizontal ends, Angle resumes",
+  "expected": [
+   "DrawLineAngle"
+  ],
+  "got": [
+   "DrawLine",
+   "DrawLineAngle",
+   "DrawLineHorizontal"
+  ],
+  "ok": false
+ },
+ {
+  "scenario": "S1 switch tools",
+  "step": "Escape: Angle ends, 2 Points resumes",
+  "expected": [
+   "DrawLine"
+  ],
+  "got": [
+   "DrawLine",
+   "DrawLineAngle",
+   "DrawLineHorizontal"
+  ],
+  "ok": false
+ },
+ {
+  "scenario": "S1 switch tools",
+  "step": "Escape: nothing left",
+  "expected": [],
+  "got": [
+   "DrawLine",
+   "DrawLineAngle",
+   "DrawLineHorizontal"
+  ],
+  "ok": false
+ },
+ {
+  "scenario": "S2 right click finishes",
+  "step": "2 Points",
+  "expected": [
+   "DrawLine"
+  ],
+  "got": [
+   "DrawLineAngle",
+   "DrawLineHorizontal"
+  ],
+  "ok": false
+ },
+ {
+  "scenario": "S2 right click finishes",
+  "step": "right click",
+  "expected": [],
+  "got": [
+   "DrawLineAngle",
+   "DrawLineHorizontal"
+  ],
+  "ok": false
+ },
+ {
+  "scenario": "S3 stacked tools",
+  "step": "2 Points then Angle",
+  "expected": [
+   "DrawLineAngle"
+  ],
+  "got": [
+   "DrawLine",
+   "DrawLineHorizontal"
+  ],
+  "ok": false
+ },
+ {
+  "scenario": "S3 stacked tools",
+  "step": "right click ends Angle, 2 Points resumes",
+  "expected": [
+   "DrawLine"
+  ],
+  "got": [
+   "DrawLine",
+   "DrawLineHorizontal"
+  ],
+  "ok": false
+ },
+ {
+  "scenario": "S3 stacked tools",
+  "step": "Escape",
+  "expected": [],
+  "got": [
+   "DrawLine",
+   "DrawLineHorizontal"
+  ],
+  "ok": false
+ },
+ {
+  "scenario": "S4 draw a line",
+  "step": "two points clicked",
+  "expected": [
+   "DrawLine"
+  ],
+  "got": [
+   "DrawLineHorizontal"
+  ],
+  "ok": false
+ },
+ {
+  "scenario": "S4 draw a line",
+  "step": "right click (back to first point)",
+  "expected": [
+   "DrawLine"
+  ],
+  "got": [
+   "DrawLineHorizontal"
+  ],
+  "ok": false
+ },
+ {
+  "scenario": "S4 draw a line",
+  "step": "right click (finished)",
+  "expected": [],
+  "got": [
+   "DrawLineHorizontal"
+  ],
+  "ok": false
+ },
+ {
+  "scenario": "S6 same tool twice",
+  "step": "2 Points twice",
+  "expected": [
+   "DrawLine"
+  ],
+  "got": [
+   "DrawLineHorizontal"
+  ],
+  "ok": false
+ },
+ {
+  "scenario": "S6 same tool twice",
+  "step": "Escape: second ends, first resumes",
+  "expected": [
+   "DrawLine"
+  ],
+  "got": [
+   "DrawLineHorizontal"
+  ],
+  "ok": false
+ },
+ {
+  "scenario": "S6 same tool twice",
+  "step": "Escape: nothing left",
+  "expected": [],
+  "got": [
+   "DrawLineHorizontal"
+  ],
+  "ok": false
+ },
+ {
+  "scenario": "S7 lock relative zero",
+  "step": "lock clicked",
+  "expected": [],
+  "got": [
+   "DrawLineHorizontal"
+  ],
+  "ok": false,
+  "extra_lock_checked": true,
+  "extra_ok": true
+ },
+ {
+  "scenario": "S7 lock relative zero",
+  "step": "tools used while locked",
+  "expected": [
+   "DrawLineAngle"
+  ],
+  "got": [
+   "DrawLine",
+   "DrawLineAngle",
+   "DrawLineHorizontal"
+  ],
+  "ok": false,
+  "extra_lock_checked": true,
+  "extra_ok": true
+ },
+ {
+  "scenario": "S7 lock relative zero",
+  "step": "Escape: Angle ends, 2 Points resumes, still locked",
+  "expected": [
+   "DrawLine"
+  ],
+  "got": [
+   "DrawLine",
+   "DrawLineAngle",
+   "DrawLineHorizontal"
+  ],
+  "ok": false,
+  "extra_lock_checked": true,
+  "extra_ok": true
+ },
+ {
+  "scenario": "S7 lock relative zero",
+  "step": "Escape: nothing left, still locked",
+  "expected": [],
+  "got": [
+   "DrawLine",
+   "DrawLineAngle",
+   "DrawLineHorizontal"
+  ],
+  "ok": false,
+  "extra_lock_checked": true,
+  "extra_ok": true
+ },
+ {
+  "scenario": "S7 lock relative zero",
+  "step": "unlocked again",
+  "expected": [],
+  "got": [
+   "DrawLine",
+   "DrawLineAngle",
+   "DrawLineHorizontal"
+  ],
+  "ok": false,
+  "extra_lock_checked": false,
+  "extra_ok": true
+ },
+ {
+  "scenario": "S7b set relative zero inside a tool",
+  "step": "set relative zero clicked",
+  "expected": [
+   "DrawLine"
+  ],
+  "got": [
+   "DrawLineAngle",
+   "DrawLineHorizontal"
+  ],
+  "ok": false
+ },
+ {
+  "scenario": "S7b set relative zero inside a tool",
+  "step": "point clicked, tool resumed",
+  "expected": [
+   "DrawLine"
+  ],
+  "got": [
+   "DrawLineAngle",
+   "DrawLineHorizontal"
+  ],
+  "ok": false
+ },
+ {
+  "scenario": "S7b set relative zero inside a tool",
+  "step": "Escape",
+  "expected": [],
+  "got": [
+   "DrawLineAngle",
+   "DrawLineHorizontal"
+  ],
+  "ok": false
+ },
+ {
+  "scenario": "S8 zoom pan inside a tool",
+  "step": "zoom pan active",
+  "expected": [],
+  "got": [
+   "DrawLine",
+   "DrawLineAngle",
+   "DrawLineHorizontal"
+  ],
+  "ok": false
+ },
+ {
+  "scenario": "S8 zoom pan inside a tool",
+  "step": "right click ends pan, 2 Points resumes",
+  "expected": [
+   "DrawLine"
+  ],
+  "got": [
+   "DrawLine",
+   "DrawLineAngle",
+   "DrawLineHorizontal"
+  ],
+  "ok": false
+ },
+ {
+  "scenario": "S8 zoom pan inside a tool",
+  "step": "Escape",
+  "expected": [],
+  "got": [
+   "DrawLine",
+   "DrawLineAngle",
+   "DrawLineHorizontal"
+  ],
+  "ok": false
+ },
+ {
+  "scenario": "S5 move chain",
+  "step": "Move chosen (selection)",
+  "expected": [
+   "ModifyMove"
+  ],
+  "got": [
+   "ModifyMove"
+  ],
+  "ok": true
+ },
+ {
+  "scenario": "S5 move chain",
+  "step": "all selected (command sa)",
+  "expected": [
+   "ModifyMove"
+  ],
+  "got": [
+   "ModifyMove"
+  ],
+  "ok": true
+ },
+ {
+  "scenario": "S5 move chain",
+  "step": "Enter: move phase",
+  "expected": [
+   "ModifyMove"
+  ],
+  "got": [
+   "ModifyMove"
+  ],
+  "ok": true,
+  "extra_hint_changed": true,
+  "extra_ok": true
+ },
+ {
+  "scenario": "S5 move chain",
+  "step": "Escape",
+  "expected": [],
+  "got": [
+   "ModifyMove"
+  ],
+  "ok": false
+ },
+ {
+  "scenario": "S5b tool during selection",
+  "step": "Move then 2 Points (before any mouse event)",
+  "expected": [],
+  "got": [],
+  "ok": true
+ },
+ {
+  "scenario": "S5b tool during selection",
+  "step": "Escape: 2 Points ends, Move resumes",
+  "expected": [
+   "ModifyMove"
+  ],
+  "got": [],
+  "ok": false
+ },
+ {
+  "scenario": "S5b tool during selection",
+  "step": "reset",
+  "expected": [],
+  "got": [],
+  "ok": true
+ },
+ {
+  "scenario": "S5c modify tool twice",
+  "step": "Move twice",
+  "expected": [
+   "ModifyMove"
+  ],
+  "got": [],
+  "ok": false
+ },
+ {
+  "scenario": "S5c modify tool twice",
+  "step": "reset",
+  "expected": [],
+  "got": [],
+  "ok": true
+ },
+ {
+  "scenario": "S5d select window during selection",
+  "step": "Move then Select Window (before any mouse event)",
+  "expected": [],
+  "got": [
+   "ModifyMove"
+  ],
+  "ok": false
+ },
+ {
+  "scenario": "S5d select window during selection",
+  "step": "right click ends Select Window, Move resumes",
+  "expected": [
+   "ModifyMove"
+  ],
+  "got": [
+   "ModifyMove"
+  ],
+  "ok": true
+ },
+ {
+  "scenario": "S5d select window during selection",
+  "step": "right click cancels Move",
+  "expected": [],
+  "got": [
+   "ModifyMove"
+  ],
+  "ok": false
+ },
+ {
+  "scenario": "S5e right click cancels selection",
+  "step": "Move chosen",
+  "expected": [
+   "ModifyMove"
+  ],
+  "got": [],
+  "ok": false
+ },
+ {
+  "scenario": "S5e right click cancels selection",
+  "step": "right click",
+  "expected": [],
+  "got": [],
+  "ok": true
+ },
+ {
+  "scenario": "S9a select entity during selection",
+  "step": "Move then Select Entity (before any mouse event)",
+  "expected": [
+   "ModifyMove"
+  ],
+  "got": [
+   "ModifyMove"
+  ],
+  "ok": true
+ },
+ {
+  "scenario": "S9a select entity during selection",
+  "step": "after a mouse move",
+  "expected": [
+   "ModifyMove"
+  ],
+  "got": [
+   "ModifyMove"
+  ],
+  "ok": true
+ },
+ {
+  "scenario": "S9a select entity during selection",
+  "step": "reset",
+  "expected": [],
+  "got": [
+   "ModifyMove"
+  ],
+  "ok": false
+ },
+ {
+  "scenario": "S9 select entity during selection",
+  "step": "Move then Select Entity (before any mouse event)",
+  "expected": [],
+  "got": [
+   "SelectSingle"
+  ],
+  "ok": false
+ },
+ {
+  "scenario": "S9 select entity during selection",
+  "step": "reset",
+  "expected": [],
+  "got": [
+   "SelectSingle"
+  ],
+  "ok": false
+ },
+ {
+  "scenario": "S9b select entity twice",
+  "step": "Select Entity",
+  "expected": [
+   "SelectSingle"
+  ],
+  "got": [],
+  "ok": false
+ },
+ {
+  "scenario": "S9b select entity twice",
+  "step": "Select Entity again",
+  "expected": [
+   "SelectSingle"
+  ],
+  "got": [
+   "SelectSingle"
+  ],
+  "ok": true
+ },
+ {
+  "scenario": "S9b select entity twice",
+  "step": "Escape",
+  "expected": [],
+  "got": [
+   "SelectSingle"
+  ],
+  "ok": false
+ }
+]
