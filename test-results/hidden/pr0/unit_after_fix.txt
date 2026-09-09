@@ -1,0 +1,99 @@
+Filters: [linetype]
+Randomness seeded to: 4294967295
+RS_Document::RS_Document() 
+RS_Graphic constructor: autosaveFilename initialized as 'Unnamed'
+RS_VariableDict::addVariable()
+RS_VariableDict::addVariable()
+RS_VariableDict::addVariable()
+RS_VariableDict::addVariable()
+RS_VariableDict::addVariable()
+RS_VariableDict::addVariable()
+RS_VariableDict::addVariable()
+RS_VariableDict::addVariable()
+RS_VariableDict::addVariable()
+RS_VariableDict::addVariable()
+RS_VariableDict::addVariable()
+RS_VariableDict::addVariable()
+RS_VariableDict::addVariable()
+RS_VariableDict::addVariable()
+RS_VariableDict::addVariable()
+RS_VariableDict::addVariable()
+RS_VariableDict::addVariable()
+RS_VariableDict::addVariable()
+RS_VariableDict::addVariable()
+RS_VariableDict::addVariable()
+RS_FilterDXFRW::RS_FilterDXFRW()
+RS_FilterDXFRW::RS_FilterDXFRW(): OK
+RS_FilterDXFRW::fileImport
+DXFRW Filter: importing file '/tmp/dxf_roundtrip_hidden2_src.dxf'...
+RS_VariableDict::addVariable()
+RS_FilterDXFRW::fileImport: reading file
+dxfRW::read 1def
+dxfRW::read 2
+dxfRW::processDxf() start processing dxf
+0
+SECTION
+0 code
+SECTION new section
+2
+ENTITIES
+2 code
+ENTITIES process section
+dxfRW::processEntities
+0
+LINE
+LINE entity boundary
+dxfRW::processLine
+8
+0
+8
+6
+HIDDEN2
+6
+10
+0.0000001010
+20
+0.0000001020
+11
+10.0000001011
+21
+0.0000001021
+0
+ENDSEC
+0
+ENDSEC entity boundary
+ENDSEC
+RS_FilterDXF::addLine
+RS_FilterDXF::addLine: create line
+RS_FilterDXF::addLine: set attributes
+RS_FilterDXF::setEntityAttributes
+RS_FilterDXF::addLayer
+  adding layer: 0
+RS_FilterDXF::addLayer: creating layer
+RS_FilterDXF::addLayer: set pen
+RS_FilterDXF::addLayer: flags
+RS_FilterDXF::addLayer: add layer to graphic
+RS_LayerList::addLayer()
+RS_LayerList::activate notify: 0 begin
+RS_LayerList::activate end
+RS_FilterDXF::addLayer: OK
+RS_FilterDXF::setEntityAttributes: OK
+RS_FilterDXF::addLine: add entity
+RS_FilterDXF::addLine: OK
+0
+EOF
+0 code
+RS_FilterDXFRW::fileImport: reading file: OK
+RS_VariableDict::getString: key: '$CLAYER'
+RS_LayerList::activate notify: 1 begin
+RS_LayerList::activate end
+RS_FilterDXFRW::fileImport: updating inserts
+RS_EntityContainer::updateInserts() ID/type: 1/5
+RS_EntityContainer::updateInserts: skip entity ID/type: 1/5
+RS_EntityContainer::updateInserts() ID/type: 1/5
+RS_FilterDXFRW::fileImport OK
+RS_FilterDXFRW::~RS_FilterDXFRW(): OK
+DXF file version: AC1021/R2007
+===============================================================================
+All tests passed (6 assertions in 1 test case)
+

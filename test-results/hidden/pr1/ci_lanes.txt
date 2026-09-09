@@ -1,0 +1,2 @@
+librecad_dxf_fast_tests rc=0 All tests passed (6572 assertions in 517 test cases)
+librecad_dwg_fast_tests rc=0 test cases:   946 |   909 passed | 37 skipped

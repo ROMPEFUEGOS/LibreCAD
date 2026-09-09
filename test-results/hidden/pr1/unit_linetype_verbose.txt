@@ -1,0 +1,417 @@
+Filters: [linetype]
+Randomness seeded to: 4294967295
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+librecad_dxf_roundtrip_tests is a Catch2 v3.8.1 host application.
+Run with -? for options
+
+-------------------------------------------------------------------------------
+DXF round-trip preserves the HIDDEN linetype on an entity
+-------------------------------------------------------------------------------
+/home/kecojones/Documents/LibreCAD-fork/src-hidden/librecad/src/lib/filters/tests/dxf_roundtrip_tests.cpp:4689
+...............................................................................
+
+/home/kecojones/Documents/LibreCAD-fork/src-hidden/librecad/src/lib/filters/tests/dxf_roundtrip_tests.cpp:4706: PASSED:
+  REQUIRE( filter.fileExport(graphic, QString::fromStdString(out), RS2::FormatDXFRW) )
+with expansion:
+  true
+
+/home/kecojones/Documents/LibreCAD-fork/src-hidden/librecad/src/lib/filters/tests/dxf_roundtrip_tests.cpp:4711: PASSED:
+  CHECK( recordGroupValues(out, "LINE", "6") == std::vector<std::string>{"HIDDEN"} )
+with expansion:
+  { "HIDDEN" } == { "HIDDEN" }
+
+/home/kecojones/Documents/LibreCAD-fork/src-hidden/librecad/src/lib/filters/tests/dxf_roundtrip_tests.cpp:4715: PASSED:
+  REQUIRE( dashes.size() == 2 )
+with expansion:
+  2 == 2
+
+/home/kecojones/Documents/LibreCAD-fork/src-hidden/librecad/src/lib/filters/tests/dxf_roundtrip_tests.cpp:4716: PASSED:
+  CHECK( std::stod(dashes[0]) == Catch::Approx(6.35) )
+with expansion:
+  6.34999999999999964
+  ==
+  Approx( 6.34999999999999964 )
+
+/home/kecojones/Documents/LibreCAD-fork/src-hidden/librecad/src/lib/filters/tests/dxf_roundtrip_tests.cpp:4717: PASSED:
+  CHECK( std::stod(dashes[1]) == Catch::Approx(-3.175) )
+with expansion:
+  -3.17499999999999982
+  ==
+  Approx( -3.17499999999999982 )
+
+/home/kecojones/Documents/LibreCAD-fork/src-hidden/librecad/src/lib/filters/tests/dxf_roundtrip_tests.cpp:4718: PASSED:
+  CHECK( ltypeRecordGroupValues(out, "HIDDEN", "73") == std::vector<std::string>{"2"} )
+with expansion:
+  { "2" } == { "2" }
+
+/home/kecojones/Documents/LibreCAD-fork/src-hidden/librecad/src/lib/filters/tests/dxf_roundtrip_tests.cpp:4724: PASSED:
+  REQUIRE( filter.fileImport(reimported, QString::fromStdString(out), RS2::FormatDXFRW) )
+with expansion:
+  true
+
+/home/kecojones/Documents/LibreCAD-fork/src-hidden/librecad/src/lib/filters/tests/dxf_roundtrip_tests.cpp:4728: PASSED:
+  REQUIRE( imported != nullptr )
+with expansion:
+  0x0000626d343b7b80 != nullptr
+
+/home/kecojones/Documents/LibreCAD-fork/src-hidden/librecad/src/lib/filters/tests/dxf_roundtrip_tests.cpp:4729: PASSED:
+  CHECK( imported->getPen(false).getLineType() == RS2::HiddenLine )
+with expansion:
+  28 == 28
+
+/home/kecojones/Documents/LibreCAD-fork/src-hidden/librecad/src/lib/filters/tests/dxf_roundtrip_tests.cpp:4737: PASSED:
+  REQUIRE( filter.fileExport(reimported, QString::fromStdString(out2), RS2::FormatDXFRW) )
+with expansion:
+  true
+
+/home/kecojones/Documents/LibreCAD-fork/src-hidden/librecad/src/lib/filters/tests/dxf_roundtrip_tests.cpp:4740: PASSED:
+  CHECK( ltypeRecordGroupValues(out2, "HIDDEN", "73") == std::vector<std::string>{"2"} )
+with expansion:
+  { "2" } == { "2" }
+
+/home/kecojones/Documents/LibreCAD-fork/src-hidden/librecad/src/lib/filters/tests/dxf_roundtrip_tests.cpp:4742: PASSED:
+  CHECK( recordGroupValues(out2, "LINE", "6") == std::vector<std::string>{"HIDDEN"} )
+with expansion:
+  { "HIDDEN" } == { "HIDDEN" }
+
+/home/kecojones/Documents/LibreCAD-fork/src-hidden/librecad/src/lib/filters/tests/dxf_roundtrip_tests.cpp:4752: PASSED:
+  REQUIRE( filter.fileExport(graphic, QString::fromStdString(dwg), RS2::FormatDWG2004) )
+with expansion:
+  true
+
+DWG file version: AC1018/R2004
+/home/kecojones/Documents/LibreCAD-fork/src-hidden/librecad/src/lib/filters/tests/dxf_roundtrip_tests.cpp:4758: PASSED:
+  REQUIRE( filter.fileImport(fromDwg, QString::fromStdString(dwg), RS2::FormatDWG) )
+with expansion:
+  true
+
+/home/kecojones/Documents/LibreCAD-fork/src-hidden/librecad/src/lib/filters/tests/dxf_roundtrip_tests.cpp:4762: PASSED:
+  REQUIRE( dwgLine != nullptr )
+with expansion:
+  0x0000626d3442d010 != nullptr
+
+/home/kecojones/Documents/LibreCAD-fork/src-hidden/librecad/src/lib/filters/tests/dxf_roundtrip_tests.cpp:4763: PASSED:
+  CHECK( dwgLine->getPen(false).getLineType() == RS2::HiddenLine )
+with expansion:
+  28 == 28
+
+-------------------------------------------------------------------------------
+Every DXF linetype name LibreCAD writes maps back to the same RS2::LineType
+-------------------------------------------------------------------------------
+/home/kecojones/Documents/LibreCAD-fork/src-hidden/librecad/src/lib/filters/tests/dxf_roundtrip_tests.cpp:4770
+...............................................................................
+
+/home/kecojones/Documents/LibreCAD-fork/src-hidden/librecad/src/lib/filters/tests/dxf_roundtrip_tests.cpp:4789: PASSED:
+  CHECK( RS_FilterDXFRW::nameToLineType(name) == type )
+with expansion:
+  1 == 1
+with message:
+  linetype 1 -> CONTINUOUS
+
+/home/kecojones/Documents/LibreCAD-fork/src-hidden/librecad/src/lib/filters/tests/dxf_roundtrip_tests.cpp:4789: PASSED:
+  CHECK( RS_FilterDXFRW::nameToLineType(name) == type )
+with expansion:
+  2 == 2
+with message:
+  linetype 2 -> DOT
+
+/home/kecojones/Documents/LibreCAD-fork/src-hidden/librecad/src/lib/filters/tests/dxf_roundtrip_tests.cpp:4789: PASSED:
+  CHECK( RS_FilterDXFRW::nameToLineType(name) == type )
+with expansion:
+  3 == 3
+with message:
+  linetype 3 -> DOTTINY
+
+/home/kecojones/Documents/LibreCAD-fork/src-hidden/librecad/src/lib/filters/tests/dxf_roundtrip_tests.cpp:4789: PASSED:
+  CHECK( RS_FilterDXFRW::nameToLineType(name) == type )
+with expansion:
+  4 == 4
+with message:
+  linetype 4 -> DOT2
+
+/home/kecojones/Documents/LibreCAD-fork/src-hidden/librecad/src/lib/filters/tests/dxf_roundtrip_tests.cpp:4789: PASSED:
+  CHECK( RS_FilterDXFRW::nameToLineType(name) == type )
+with expansion:
+  5 == 5
+with message:
+  linetype 5 -> DOTX2
+
+/home/kecojones/Documents/LibreCAD-fork/src-hidden/librecad/src/lib/filters/tests/dxf_roundtrip_tests.cpp:4789: PASSED:
+  CHECK( RS_FilterDXFRW::nameToLineType(name) == type )
+with expansion:
+  6 == 6
+with message:
+  linetype 6 -> DASHED
+
+/home/kecojones/Documents/LibreCAD-fork/src-hidden/librecad/src/lib/filters/tests/dxf_roundtrip_tests.cpp:4789: PASSED:
+  CHECK( RS_FilterDXFRW::nameToLineType(name) == type )
+with expansion:
+  7 == 7
+with message:
+  linetype 7 -> DASHEDTINY
+
+/home/kecojones/Documents/LibreCAD-fork/src-hidden/librecad/src/lib/filters/tests/dxf_roundtrip_tests.cpp:4789: PASSED:
+  CHECK( RS_FilterDXFRW::nameToLineType(name) == type )
+with expansion:
+  8 == 8
+with message:
+  linetype 8 -> DASHED2
+
+/home/kecojones/Documents/LibreCAD-fork/src-hidden/librecad/src/lib/filters/tests/dxf_roundtrip_tests.cpp:4789: PASSED:
+  CHECK( RS_FilterDXFRW::nameToLineType(name) == type )
+with expansion:
+  9 == 9
+with message:
+  linetype 9 -> DASHEDX2
+
+/home/kecojones/Documents/LibreCAD-fork/src-hidden/librecad/src/lib/filters/tests/dxf_roundtrip_tests.cpp:4789: PASSED:
+  CHECK( RS_FilterDXFRW::nameToLineType(name) == type )
+with expansion:
+  28 == 28
+with message:
+  linetype 28 -> HIDDEN
+
+/home/kecojones/Documents/LibreCAD-fork/src-hidden/librecad/src/lib/filters/tests/dxf_roundtrip_tests.cpp:4789: PASSED:
+  CHECK( RS_FilterDXFRW::nameToLineType(name) == type )
+with expansion:
+  29 == 29
+with message:
+  linetype 29 -> HIDDENTINY
+
+/home/kecojones/Documents/LibreCAD-fork/src-hidden/librecad/src/lib/filters/tests/dxf_roundtrip_tests.cpp:4789: PASSED:
+  CHECK( RS_FilterDXFRW::nameToLineType(name) == type )
+with expansion:
+  30 == 30
+with message:
+  linetype 30 -> HIDDEN2
+
+/home/kecojones/Documents/LibreCAD-fork/src-hidden/librecad/src/lib/filters/tests/dxf_roundtrip_tests.cpp:4789: PASSED:
+  CHECK( RS_FilterDXFRW::nameToLineType(name) == type )
+with expansion:
+  31 == 31
+with message:
+  linetype 31 -> HIDDENX2
+
+/home/kecojones/Documents/LibreCAD-fork/src-hidden/librecad/src/lib/filters/tests/dxf_roundtrip_tests.cpp:4789: PASSED:
+  CHECK( RS_FilterDXFRW::nameToLineType(name) == type )
+with expansion:
+  10 == 10
+with message:
+  linetype 10 -> DASHDOT
+
+/home/kecojones/Documents/LibreCAD-fork/src-hidden/librecad/src/lib/filters/tests/dxf_roundtrip_tests.cpp:4789: PASSED:
+  CHECK( RS_FilterDXFRW::nameToLineType(name) == type )
+with expansion:
+  11 == 11
+with message:
+  linetype 11 -> DASHDOTTINY
+
+/home/kecojones/Documents/LibreCAD-fork/src-hidden/librecad/src/lib/filters/tests/dxf_roundtrip_tests.cpp:4789: PASSED:
+  CHECK( RS_FilterDXFRW::nameToLineType(name) == type )
+with expansion:
+  12 == 12
+with message:
+  linetype 12 -> DASHDOT2
+
+/home/kecojones/Documents/LibreCAD-fork/src-hidden/librecad/src/lib/filters/tests/dxf_roundtrip_tests.cpp:4789: PASSED:
+  CHECK( RS_FilterDXFRW::nameToLineType(name) == type )
+with expansion:
+  13 == 13
+with message:
+  linetype 13 -> DASHDOTX2
+
+/home/kecojones/Documents/LibreCAD-fork/src-hidden/librecad/src/lib/filters/tests/dxf_roundtrip_tests.cpp:4789: PASSED:
+  CHECK( RS_FilterDXFRW::nameToLineType(name) == type )
+with expansion:
+  14 == 14
+with message:
+  linetype 14 -> DIVIDE
+
+/home/kecojones/Documents/LibreCAD-fork/src-hidden/librecad/src/lib/filters/tests/dxf_roundtrip_tests.cpp:4789: PASSED:
+  CHECK( RS_FilterDXFRW::nameToLineType(name) == type )
+with expansion:
+  15 == 15
+with message:
+  linetype 15 -> DIVIDETINY
+
+/home/kecojones/Documents/LibreCAD-fork/src-hidden/librecad/src/lib/filters/tests/dxf_roundtrip_tests.cpp:4789: PASSED:
+  CHECK( RS_FilterDXFRW::nameToLineType(name) == type )
+with expansion:
+  16 == 16
+with message:
+  linetype 16 -> DIVIDE2
+
+/home/kecojones/Documents/LibreCAD-fork/src-hidden/librecad/src/lib/filters/tests/dxf_roundtrip_tests.cpp:4789: PASSED:
+  CHECK( RS_FilterDXFRW::nameToLineType(name) == type )
+with expansion:
+  17 == 17
+with message:
+  linetype 17 -> DIVIDEX2
+
+/home/kecojones/Documents/LibreCAD-fork/src-hidden/librecad/src/lib/filters/tests/dxf_roundtrip_tests.cpp:4789: PASSED:
+  CHECK( RS_FilterDXFRW::nameToLineType(name) == type )
+with expansion:
+  18 == 18
+with message:
+  linetype 18 -> CENTER
+
+/home/kecojones/Documents/LibreCAD-fork/src-hidden/librecad/src/lib/filters/tests/dxf_roundtrip_tests.cpp:4789: PASSED:
+  CHECK( RS_FilterDXFRW::nameToLineType(name) == type )
+with expansion:
+  19 == 19
+with message:
+  linetype 19 -> CENTERTINY
+
+/home/kecojones/Documents/LibreCAD-fork/src-hidden/librecad/src/lib/filters/tests/dxf_roundtrip_tests.cpp:4789: PASSED:
+  CHECK( RS_FilterDXFRW::nameToLineType(name) == type )
+with expansion:
+  20 == 20
+with message:
+  linetype 20 -> CENTER2
+
+/home/kecojones/Documents/LibreCAD-fork/src-hidden/librecad/src/lib/filters/tests/dxf_roundtrip_tests.cpp:4789: PASSED:
+  CHECK( RS_FilterDXFRW::nameToLineType(name) == type )
+with expansion:
+  21 == 21
+with message:
+  linetype 21 -> CENTERX2
+
+/home/kecojones/Documents/LibreCAD-fork/src-hidden/librecad/src/lib/filters/tests/dxf_roundtrip_tests.cpp:4789: PASSED:
+  CHECK( RS_FilterDXFRW::nameToLineType(name) == type )
+with expansion:
+  22 == 22
+with message:
+  linetype 22 -> BORDER
+
+/home/kecojones/Documents/LibreCAD-fork/src-hidden/librecad/src/lib/filters/tests/dxf_roundtrip_tests.cpp:4789: PASSED:
+  CHECK( RS_FilterDXFRW::nameToLineType(name) == type )
+with expansion:
+  23 == 23
+with message:
+  linetype 23 -> BORDERTINY
+
+/home/kecojones/Documents/LibreCAD-fork/src-hidden/librecad/src/lib/filters/tests/dxf_roundtrip_tests.cpp:4789: PASSED:
+  CHECK( RS_FilterDXFRW::nameToLineType(name) == type )
+with expansion:
+  24 == 24
+with message:
+  linetype 24 -> BORDER2
+
+/home/kecojones/Documents/LibreCAD-fork/src-hidden/librecad/src/lib/filters/tests/dxf_roundtrip_tests.cpp:4789: PASSED:
+  CHECK( RS_FilterDXFRW::nameToLineType(name) == type )
+with expansion:
+  25 == 25
+with message:
+  linetype 25 -> BORDERX2
+
+/home/kecojones/Documents/LibreCAD-fork/src-hidden/librecad/src/lib/filters/tests/dxf_roundtrip_tests.cpp:4789: PASSED:
+  CHECK( RS_FilterDXFRW::nameToLineType(name) == type )
+with expansion:
+  -1 == -1
+with message:
+  linetype -1 -> ByLayer
+
+/home/kecojones/Documents/LibreCAD-fork/src-hidden/librecad/src/lib/filters/tests/dxf_roundtrip_tests.cpp:4789: PASSED:
+  CHECK( RS_FilterDXFRW::nameToLineType(name) == type )
+with expansion:
+  -2 == -2
+with message:
+  linetype -2 -> ByBlock
+
+/home/kecojones/Documents/LibreCAD-fork/src-hidden/librecad/src/lib/filters/tests/dxf_roundtrip_tests.cpp:4793: PASSED:
+  CHECK( RS_FilterDXFRW::lineTypeToName(RS2::HiddenLine) == "HIDDEN" )
+with expansion:
+  { {?}, {?}, {?}, {?}, {?}, {?} }
+  ==
+  "HIDDEN"
+
+/home/kecojones/Documents/LibreCAD-fork/src-hidden/librecad/src/lib/filters/tests/dxf_roundtrip_tests.cpp:4794: PASSED:
+  CHECK( RS_FilterDXFRW::lineTypeToName(RS2::HiddenLineTiny) == "HIDDENTINY" )
+with expansion:
+  { {?}, {?}, {?}, {?}, {?}, {?}, {?}, {?}, {?}, {?} }
+  ==
+  "HIDDENTINY"
+
+/home/kecojones/Documents/LibreCAD-fork/src-hidden/librecad/src/lib/filters/tests/dxf_roundtrip_tests.cpp:4795: PASSED:
+  CHECK( RS_FilterDXFRW::lineTypeToName(RS2::HiddenLine2) == "HIDDEN2" )
+with expansion:
+  { {?}, {?}, {?}, {?}, {?}, {?}, {?} }
+  ==
+  "HIDDEN2"
+
+/home/kecojones/Documents/LibreCAD-fork/src-hidden/librecad/src/lib/filters/tests/dxf_roundtrip_tests.cpp:4796: PASSED:
+  CHECK( RS_FilterDXFRW::lineTypeToName(RS2::HiddenLineX2) == "HIDDENX2" )
+with expansion:
+  { {?}, {?}, {?}, {?}, {?}, {?}, {?}, {?} }
+  ==
+  "HIDDENX2"
+
+/home/kecojones/Documents/LibreCAD-fork/src-hidden/librecad/src/lib/filters/tests/dxf_roundtrip_tests.cpp:4803: PASSED:
+  CHECK( RS_LineTypePattern::getPattern(type) != nullptr )
+with expansion:
+  0x0000626cffcc9660 != nullptr
+with message:
+  linetype 28
+
+/home/kecojones/Documents/LibreCAD-fork/src-hidden/librecad/src/lib/filters/tests/dxf_roundtrip_tests.cpp:4803: PASSED:
+  CHECK( RS_LineTypePattern::getPattern(type) != nullptr )
+with expansion:
+  0x0000626cffcc96a0 != nullptr
+with message:
+  linetype 29
+
+/home/kecojones/Documents/LibreCAD-fork/src-hidden/librecad/src/lib/filters/tests/dxf_roundtrip_tests.cpp:4803: PASSED:
+  CHECK( RS_LineTypePattern::getPattern(type) != nullptr )
+with expansion:
+  0x0000626cffcc9620 != nullptr
+with message:
+  linetype 30
+
+/home/kecojones/Documents/LibreCAD-fork/src-hidden/librecad/src/lib/filters/tests/dxf_roundtrip_tests.cpp:4803: PASSED:
+  CHECK( RS_LineTypePattern::getPattern(type) != nullptr )
+with expansion:
+  0x0000626cffcc95e0 != nullptr
+with message:
+  linetype 31
+
+-------------------------------------------------------------------------------
+DXF import maps HIDDEN2 to the half-scale hidden linetype, not the tiny dashed
+one
+-------------------------------------------------------------------------------
+/home/kecojones/Documents/LibreCAD-fork/src-hidden/librecad/src/lib/filters/tests/dxf_roundtrip_tests.cpp:4654
+...............................................................................
+
+/home/kecojones/Documents/LibreCAD-fork/src-hidden/librecad/src/lib/filters/tests/dxf_roundtrip_tests.cpp:4671: PASSED:
+  REQUIRE( filter.fileImport(graphic, QString::fromStdString(src), RS2::FormatDXFRW) )
+with expansion:
+  true
+
+/home/kecojones/Documents/LibreCAD-fork/src-hidden/librecad/src/lib/filters/tests/dxf_roundtrip_tests.cpp:4675: PASSED:
+  REQUIRE( line != nullptr )
+with expansion:
+  0x0000626d3442d010 != nullptr
+
+/home/kecojones/Documents/LibreCAD-fork/src-hidden/librecad/src/lib/filters/tests/dxf_roundtrip_tests.cpp:4679: PASSED:
+  CHECK( line->getPen(false).getLineType() == RS2::HiddenLine2 )
+with expansion:
+  30 == 30
+
+/home/kecojones/Documents/LibreCAD-fork/src-hidden/librecad/src/lib/filters/tests/dxf_roundtrip_tests.cpp:4682: PASSED:
+  CHECK( RS_FilterDXFRW::nameToLineType("DASHEDTINY") == RS2::DashLineTiny )
+with expansion:
+  7 == 7
+
+/home/kecojones/Documents/LibreCAD-fork/src-hidden/librecad/src/lib/filters/tests/dxf_roundtrip_tests.cpp:4683: PASSED:
+  CHECK( RS_FilterDXFRW::nameToLineType("DASHED2") == RS2::DashLine2 )
+with expansion:
+  8 == 8
+
+/home/kecojones/Documents/LibreCAD-fork/src-hidden/librecad/src/lib/filters/tests/dxf_roundtrip_tests.cpp:4684: PASSED:
+  CHECK( RS_FilterDXFRW::nameToLineType("hidden2") == RS2::HiddenLine2 )
+with expansion:
+  30 == 30
+
+===============================================================================
+All tests passed (61 assertions in 3 test cases)
+

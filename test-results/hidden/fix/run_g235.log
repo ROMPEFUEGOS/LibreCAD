@@ -1,0 +1,21 @@
+{
+  "build": "hidden",
+  "scenarios": {
+    "G2_pick_hidden_draw_save": {
+      "combobox_crop": "/home/kecojones/Documents/LibreCAD-fork/test-results/hidden/fix/shots_g2/pen_linetype_selected.png",
+      "dxf": "/home/kecojones/Documents/LibreCAD-fork/test-results/hidden/fix/hidden_saved.dxf",
+      "check": {
+        "ok": true,
+        "report": "HIDDEN       LTYPE=yes used-by-LINE=yes pattern=[6.35, -3.175]\nLINE linetypes in file: ['HIDDEN']"
+      }
+    },
+    "G3_reopen_properties": "/home/kecojones/Documents/LibreCAD-fork/test-results/hidden/fix/shots_g3/properties_reopened.png",
+    "G5_fixture_resaved": {
+      "dxf": "/home/kecojones/Documents/LibreCAD-fork/test-results/hidden/fix/hidden_family_resaved.dxf",
+      "check": {
+        "ok": true,
+        "report": "HIDDEN       LTYPE=yes used-by-LINE=yes pattern=[6.35, -3.175]\nHIDDEN2      LTYPE=yes used-by-LINE=yes pattern=[3.175, -1.5875]\nHIDDENX2     LTYPE=yes used-by-LINE=yes pattern=[12.7, -6.35]\nLINE linetypes in file: ['BYLAYER', 'HIDDEN', 'HIDDEN2', 'HIDDENX2']"
+      }
+    }
+  }
+}
