@@ -1,0 +1,29 @@
+{
+  "build": "hidden",
+  "scenarios": {
+    "G1_combobox_list": "/home/kecojones/Documents/LibreCAD-fork/test-results/phantom/fix/shots_g1/combo_open.png",
+    "G1F_combobox_family": "/home/kecojones/Documents/LibreCAD-fork/test-results/phantom/fix/shots_g1f/combo_open_family.png",
+    "G1E_combobox_end": "/home/kecojones/Documents/LibreCAD-fork/test-results/phantom/fix/shots_g1e/combo_open_end.png",
+    "G2_pick_phantom_draw_save": {
+      "combobox_crop": "/home/kecojones/Documents/LibreCAD-fork/test-results/phantom/fix/shots_g2/pen_linetype_selected.png",
+      "dxf": "/home/kecojones/Documents/LibreCAD-fork/test-results/phantom/fix/phantom_saved.dxf",
+      "check": {
+        "ok": true,
+        "report": "PHANTOM      LTYPE=yes used-by-LINE=yes pattern=[31.75, -6.35, 6.35, -6.35, 6.35, -6.35]\nLINE linetypes in file: ['PHANTOM']"
+      }
+    },
+    "G3_reopen_properties": "/home/kecojones/Documents/LibreCAD-fork/test-results/phantom/fix/shots_g3/properties_reopened.png",
+    "G4_fixture_properties": {
+      "PHANTOM": "/home/kecojones/Documents/LibreCAD-fork/test-results/phantom/fix/shots_g4_PHANTOM/properties_PHANTOM.png",
+      "PHANTOM2": "/home/kecojones/Documents/LibreCAD-fork/test-results/phantom/fix/shots_g4_PHANTOM2/properties_PHANTOM2.png",
+      "PHANTOMX2": "/home/kecojones/Documents/LibreCAD-fork/test-results/phantom/fix/shots_g4_PHANTOMX2/properties_PHANTOMX2.png"
+    },
+    "G5_fixture_resaved": {
+      "dxf": "/home/kecojones/Documents/LibreCAD-fork/test-results/phantom/fix/phantom_family_resaved.dxf",
+      "check": {
+        "ok": true,
+        "report": "PHANTOM      LTYPE=yes used-by-LINE=yes pattern=[31.75, -6.35, 6.35, -6.35, 6.35, -6.35]\nPHANTOM2     LTYPE=yes used-by-LINE=yes pattern=[15.875, -3.175, 3.175, -3.175, 3.175, -3.175]\nPHANTOMX2    LTYPE=yes used-by-LINE=yes pattern=[63.5, -12.7, 12.7, -12.7, 12.7, -12.7]\nLINE linetypes in file: ['BYLAYER', 'PHANTOM', 'PHANTOM2', 'PHANTOMX2']"
+      }
+    }
+  }
+}

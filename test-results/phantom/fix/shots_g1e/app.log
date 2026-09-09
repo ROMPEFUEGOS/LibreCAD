@@ -1,0 +1,13 @@
+WARNING: CPU random generator seem to be failing, disabling hardware random number generation
+WARNING: RDRND generated: 0xffffffff 0xffffffff 0xffffffff 0xffffffff
+RS_DEBUG::setLevel(3)
+RS_DEBUG: Critical
+RS_DEBUG: Errors
+RS_DEBUG: Warnings
+Workspaces file does not exists. File: /home/kecojones/Documents/LibreCAD-fork/test-results/phantom/fix/conf_g1e/data/LibreCAD/LibreCAD-2/workspaces.lcws
+readAliasFile(): Command alias file: /home/kecojones/Documents/LibreCAD-fork/test-results/phantom/fix/conf_g1e/data/LibreCAD/LibreCAD-2/librecad.alias
+Writing alias file
+QVncServer created on port 5902
+
+*** LibreCAD has crashed ***
+Crash log: /home/kecojones/Documents/LibreCAD-fork/src-hidden/build/hidden/install/bin/librecad.1030424.1788992457.crash.log
