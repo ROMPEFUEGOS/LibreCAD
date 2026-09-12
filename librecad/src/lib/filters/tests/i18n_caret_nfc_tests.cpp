@@ -138,3 +138,41 @@ TEST_CASE("LC_ViewList::find + getIndex: NFC view matches NFD lookup",
     REQUIRE(list.find(nfd) != nullptr);
     REQUIRE(list.getIndex(nfd) == 0);
 }
+
+#ifdef LC_NAMED_LINETYPES
+// ---------------------------------------------------------------------------
+// Named linetypes (#1738), Phase-0 red test T13: NFC/NFD lookup on the
+// document linetype table.
+//
+// Linetype names are keyed by NFC normalisation followed by an ASCII-only
+// upper-case fold, so a decomposed lookup must reach a composed entry exactly
+// as it does for layers, blocks, dim styles and views above - and, unlike
+// layers, the match folds case as well, because DXF resolves LTYPE references
+// without regard to case.
+//
+// Guarded: LC_LineTypeList arrives with Phase 1, which defines the macro.
+// ---------------------------------------------------------------------------
+
+#include "lc_linetype.h"
+#include "lc_linetypelist.h"
+
+TEST_CASE("LC_LineTypeList::find: NFC linetype matches NFD lookup",
+          "[i18n][nfc][linetypes][linetype][named]") {
+    LC_LineTypeList list;
+    // Insert a linetype name in composed (NFC) form: "Ölfarbe" with U+00D6.
+    const QString nfc = QString::fromUtf8("\xC3\x96" "lfarbe");
+    list.add(new LC_LineType(nfc));
+    // Look it up in decomposed (NFD) form: 'O' + COMBINING DIAERESIS.
+    QString nfd;
+    nfd.append(QChar('O'));
+    nfd.append(QChar(0x0308)); // COMBINING DIAERESIS
+    nfd.append(QStringLiteral("lfarbe"));
+    REQUIRE(nfc != nfd); // byte-different
+    REQUIRE(list.find(nfd) != nullptr);
+    // Case-insensitive and NFC together, in both directions: the upper-cased
+    // decomposed spelling, and the lower-case one the shared helper builds.
+    REQUIRE(list.find(nfd.toUpper()) != nullptr);
+    REQUIRE(list.find(nfdOWithDiaeresis(QString(), QStringLiteral("lfarbe")))
+            != nullptr);
+}
+#endif // LC_NAMED_LINETYPES

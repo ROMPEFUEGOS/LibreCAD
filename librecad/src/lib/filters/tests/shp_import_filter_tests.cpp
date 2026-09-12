@@ -517,3 +517,113 @@ TEST_CASE("RS_FilterSHP: canExport is always false (import-only)",
     CHECK_FALSE(filter.canExport("dummy.shp", RS2::FormatSHP));
     CHECK_FALSE(filter.canExport("dummy.shp", RS2::FormatDXFRW));
 }
+
+#ifdef LC_NAMED_LINETYPES
+// ---------------------------------------------------------------------------
+// Named linetypes (#1738), Phase-0 red test T15: the DBF LTYPE column.
+//
+// RS_FilterSHP already auto-detects a LINETYPE/LTYPE attribute column
+// (resolveFields) but folds its value into an RS2::LineType enum, losing the
+// name.  After Phase 1 the raw DBF string reaches the pen and, since the SHP
+// format carries no LTYPE table, the name survives as an empty marker record
+// on export - the same treatment an unregistered DXF group-6 name gets.
+//
+// Fixture: test_data/shp/ltype_point.{shp,shx,dbf}, generated (and committed)
+// by scripts/make_shp_fixtures.py - one POINT record whose .dbf carries an
+// LTYPE C(32) column holding "VENDOR_TAB".
+//
+// Guarded: the name-keeping API arrives with Phase 1, which defines the macro.
+// ---------------------------------------------------------------------------
+
+#include <fstream>
+#include <string>
+#include <vector>
+
+#include "rs_filterdxfrw.h"
+#include "rs_pen.h"
+
+namespace {
+
+std::string namedLinetypeTmpFile(const char* suffix) {
+    return (std::filesystem::temp_directory_path() /
+            (std::string("shp_named_linetype_") + suffix)).string();
+}
+
+// Group-`code` values of the LTYPE table record named `ltypeName`; the twin of
+// the helper of the same name in dxf_roundtrip_tests.cpp, which cannot be
+// shared because it lives in that translation unit's own anonymous namespace.
+std::vector<std::string> ltypeRecordGroupValues(const std::string& path,
+                                                const std::string& ltypeName,
+                                                const std::string& code) {
+    std::ifstream in(path);
+    std::string codeLine, valueLine;
+    std::vector<std::string> values;
+    bool inLtype = false;
+    bool nameMatched = false;
+    auto trim = [](std::string value) {
+        if (!value.empty() && value.back() == '\r')
+            value.pop_back();
+        const size_t first = value.find_first_not_of(" \t");
+        return first == std::string::npos ? std::string() : value.substr(first);
+    };
+    while (std::getline(in, codeLine) && std::getline(in, valueLine)) {
+        const std::string groupCode = trim(codeLine);
+        const std::string value = trim(valueLine);
+        if (groupCode == "0") {
+            inLtype = value == "LTYPE";
+            nameMatched = false;
+        } else if (inLtype && groupCode == "2") {
+            nameMatched = value == ltypeName;
+        } else if (inLtype && nameMatched && groupCode == code) {
+            values.push_back(value);
+        }
+    }
+    return values;
+}
+
+RS_Point* firstImportedPoint(RS_Graphic& g) {
+    for (RS_Entity* e :
+         lc::LC_ContainerTraverser{g, RS2::ResolveNone}.entities()) {
+        if (e != nullptr && e->rtti() == RS2::EntityPoint)
+            return static_cast<RS_Point*>(e);
+    }
+    return nullptr;
+}
+
+} // namespace
+
+// NOLINTNEXTLINE(readability-identifier-naming)
+TEST_CASE("RS_FilterSHP: the DBF LTYPE column reaches the pen as a name",
+          "[shp][filter][linetype][named]") {
+    ensureQtContext();
+    const QString path = corpusPath("ltype_point.shp");
+    REQUIRE(std::filesystem::is_regular_file(path.toStdString()));
+
+    RS_Graphic graphic;
+    RS_FilterSHP filter;
+    REQUIRE(filter.fileImport(graphic, path, RS2::FormatSHP));
+
+    RS_Point* point = firstImportedPoint(graphic);
+    REQUIRE(point != nullptr);
+    // "VENDOR_TAB" is no built-in, so the enum cannot carry it: only the name
+    // on the pen can.  shapelib trims the C(32) padding (TRIM_DBF_WHITESPACE
+    // in shapefil.h), so the value arrives without its trailing spaces.
+    CHECK(point->getPen(false).getLineTypeName() == "VENDOR_TAB");
+    CHECK(graphic.findLineType("VENDOR_TAB") != nullptr);
+
+    // No LTYPE table exists in a shapefile, so the entry is a marker with an
+    // empty pattern and is written as 73 = 0 - a valid record the entity can
+    // keep referencing.
+    const std::string out = namedLinetypeTmpFile("out.dxf");
+    std::filesystem::remove(out);
+    {
+        RS_FilterDXFRW dxf;
+        REQUIRE(dxf.fileExport(graphic, QString::fromStdString(out),
+                               RS2::FormatDXFRW));
+    }
+    CHECK(ltypeRecordGroupValues(out, "VENDOR_TAB", "73")
+          == std::vector<std::string>{"0"});
+
+    std::filesystem::remove(out);
+}
+#endif // LC_NAMED_LINETYPES
