@@ -8,9 +8,17 @@
 > (group code 6) to pick the machining mode. Today LibreCAD keeps only the names of its 8
 > built-in families; every other name is rewritten as `CONTINUOUS` on the first save, silently
 > (#1738 asks for this since 2024; `.lin` support was called "planned" in #1917).
-> **Decisions proposed (not locked — see §2 for the questions put to maintainers)**:
+> **Decisions**. Two of them are now settled by measurement rather than by preference — the
+> **stored form** of the pen's linetype identity (decision 1's second half, §2 Q2 option C) and the
+> acceptance gate that replaces the old ≤ 5 % target (§11), both from the render study
+> (`test-results/named-linetypes/RENDER_STUDY.md`). Everything else below is still **proposed, not
+> locked** — see §2 for the questions put to maintainers:
 > 1. **The linetype name is the identity**; `RS2::LineType` stays as a derived cache ("nearest
->    built-in") for legacy consumers. Enum values are never renumbered.
+>    built-in") for legacy consumers. Enum values are never renumbered. **Stored form**: the pen
+>    carries an interned 16-bit handle to that name (`std::uint16_t m_lineTypeId`, §4 step 4), which
+>    lands in existing padding and leaves `sizeof(RS_Pen)` at 104 (measured); the **name** stays the
+>    public API (`getLineTypeName()`/`setLineTypeName()`) and the only persisted form — no id is ever
+>    written to a file, a palette or a setting.
 > 2. **The document owns its linetype table** (`LC_LineTypeList`, shaped like `RS_LayerList`),
 >    seeded with the built-ins; `.lin` files are only *imported into* it.
 > 3. **Phase 2 renders custom patterns in device millimetres**, exactly like the built-ins do
@@ -22,7 +30,9 @@
 >    name survives and the written DXF/DWG stays valid.
 > **Builds on**: #2790 (imported LTYPE records archived as metadata), #2815 (HIDDEN),
 > #2823 (PHANTOM). **Addresses**: #1738. **Touches**: #1476, #1734, #1959, #1917.
-> **Ladder**: 5 PRs (+1 optional), each small, tested, bisect-safe, green on CMake and qmake6.
+> **Ladder**: two pre-ladder fixes (**PR-0a**, **PR-0b** — pre-existing defects in master's dashed
+> path, upstreamable on their own merits and renumbering nothing, §10), then 5 PRs (+1 optional),
+> each small, tested, bisect-safe, green on CMake and qmake6.
 
 ## What we need from you
 
@@ -31,15 +41,23 @@ LTYPE table, so a name a cutting machine reads (`CUT`, `ACAD_ISO02W100`) survive
 instead of being rewritten to `CONTINUOUS` — today `rs_filterdxfrw.cpp` · `nameToLineType`
 returns `RS2::SolidLine` for any unknown name and `lineTypeToName` falls back to `CONTINUOUS`.
 No product code exists yet, and the single decision that unblocks Phase 1 is Q1 + Q2 below —
-**document-owned table, pen = literal name + derived `RS2::LineType` cache** — answered, or a
-reasonable silence plus explicit agreement to proceed; the other seven have defaults we follow
-unless you say otherwise.
+**document-owned table, pen = interned handle to the literal name + derived `RS2::LineType`
+cache** — answered, or a reasonable silence plus explicit agreement to proceed; the other seven
+have defaults we follow unless you say otherwise.
+
+**Two changes below need no answer at all.** PR-0a and PR-0b fix two pre-existing defects in
+master's dashed path: a null `RS_LineTypePattern::getPattern()` dereference that is already
+shipped, and the dash-offset term in `RS_Pen::isSameAs` that defeats the #1922 pen cache for
+100 % of dashed entities (measured: 300 dashed lines cost 300 `RS_Painter::setPen` calls where
+300 solid lines cost **1**; +54 ns/entity). They need nothing from this plan, they land **before**
+PR-1, and they renumber nothing — the ladder itself is still 5 PRs (+1 optional). Both are
+specified in §10. If you take them and reject everything else, LibreCAD is still better off.
 
 Each line is the question, our proposed answer in bold, and where the reasoning lives; all nine
 are argued in **§2 Questions for maintainers (Phase 0 gate)**.
 
 1. Document-owned linetype table (like layers), or global `.lin` lists seeding every drawing (QCAD does both)? → **document table as truth; `.lin` only imported into it**, built-ins seeding every document. §2 Q1
-2. Pen identity: name + cached enum (**A**), or a sentinel `RS2::CustomLine` (**B**)? → **A**; B still patches every consumer and loses the name anyway. §2 Q2
+2. Pen identity: the literal name in the pen + cached enum (**A**), a sentinel `RS2::CustomLine` (**B**), or an interned 16-bit id whose spelling is that name (**C**)? → **C**, measured: +0.5 % render (inside the ±1.8 % noise floor) and `sizeof(RS_Pen)` unchanged at 104, against +2.1 %, 104 → 128 and a reproduced +84 % import-path row for A; B still patches every consumer and loses the name anyway. §2 Q2
 3. Units for custom patterns when drawing? → **device mm, identical to the built-ins**, from Phase 2; `$LTSCALE`/drawing-unit mode is an optional Phase 6 (§9, #1476). §2 Q3
 4. Aliases (`ACAD_ISO09W100`, `HIDDEN2`…): keep the literal name, or canonicalise on save? → **keep literal**; the enum cache still points at the family for icons and legacy paths. §2 Q4
 5. A name referenced by an entity or layer with no LTYPE record in the file? → **create a marker record** (`73`=0, `40`=0; a drawable ISO alias copies its family's metrics) and write it back. §2 Q5
@@ -176,7 +194,10 @@ are argued in **§2 Questions for maintainers (Phase 0 gate)**.
     - Import is one-sided: `DRW_Dimstyle::parseCode` has no case for 345–347 and nothing maps the
       DWG `dimltypeH/dimltex1H/dimltex2H` to names, so only the DSTYLE xdata path yields a name
       from a file.
-    - `RS_Color` carries `QString m_colorName` as passive metadata.
+    - `RS_Color` carries `QString m_colorName` as passive metadata — a precedent for the **public
+      API**, not for the storage: `m_colorName` sits outside equality and outside rendering, whereas
+      the pen's linetype identity **is** the render cache key (`isSameAs`). That difference is
+      exactly why the identity is an interned integer and not a `QString` (§2 Q2, §4 step 4).
     - Evidence: `lc_dimstyle.h` · `lineTypeName()`, `DIMLTYPE_LineType`; `lc_dimstyle.cpp` ·
       `DimensionLine::setLineType`, `ExtensionLine::setLineTypeFirst/Second`;
       `rs_filterdxfrw.cpp` · `findLineTypeHandleToWrite`, `prepareDRWDimStyleDimLine`,
@@ -206,28 +227,45 @@ are argued in **§2 Questions for maintainers (Phase 0 gate)**.
       `RS_Modification::doChangeEntityAttributes/doChangeBlockAttributes` (reached through
       `RS_Modification::changeAttributes`, e.g. by Modify > Attributes and `LC_ActionPenApply`),
       `LC_LayerTreeWidget::copyLayerAttributes` and `QG_WidgetPen::setPen(const RS_Entity*, …)`.
-    - Once `setLineType(enum)` derives the canonical name, ByBlock members of a custom-typed INSERT
-      draw with the built-in name, and save it after explode, unless all five use
-      `setLineTypeFromPen()`.
+    - Once `setLineType(enum)` resets the identity (id 0 = "the canonical name of the enum",
+      §4 step 4), ByBlock members of a custom-typed INSERT draw with the built-in name, and save it
+      after explode, unless all five use `setLineTypeFromPen()` — which copies the id.
     - Evidence: `rs_entity.cpp` · `getPenResolved`; `rs_insert.cpp` · `updatePen`,
       `RS_Insert::update`; `rs_modification.cpp` · `explode`,
       `updateExplodedChildrenRecursively`, `doChangeEntityAttributes`, `doChangeBlockAttributes`;
       `lc_layertreewidget.cpp` · `copyLayerAttributes`; `qg_widgetpen.cpp` ·
       `setPen(const RS_Entity*, …)`; `git grep -n 'setLineType(.*getLineType()' -- librecad/src`.
 - **`RS_Pen`** — holds `RS2::LineType m_lineType`, `m_width`, `m_screenWidth`, `RS_Color m_color`,
-  `m_alpha`, `m_dashOffset`, and `isSameAs()` is the renderer's pen-cache key.
+  `m_alpha`, `m_dashOffset`, and `isSameAs()` is the renderer's pen-cache key. **Measured layout**
+  (render study §3.4): `sizeof(RS_Pen)` = **104** = `RS_Flags` 16 + `m_lineType` 2 + **2 bytes of
+  padding** + `m_width` 4 + `m_screenWidth` 8 + `RS_Color` 56 + `m_alpha` 4 + pad + `m_dashOffset` 8.
+  A `std::uint16_t` linetype id occupies that padding for free — `sizeof` stays 104, measured against
+  the relinked library — while a `QString` there takes it to 128 (§2 Q2, §4 step 4).
   - Equality, copies and the size of the blast radius:
     - `operator==` compares type/width/colour; its only consumer is
-      `matchesSidecarPresentation()` (`rs_filterdxfrw.cpp`), where name-aware equality is the
-      wanted semantics.
+      `matchesSidecarPresentation()` (`rs_filterdxfrw.cpp`), where identity-aware equality is the
+      wanted semantics — and under the fold-id rule of §4 step 4 two spellings of one name
+      (`Vendor_mixedCase`, `VENDOR_MIXEDCASE`) still compare **equal** there.
     - `isSameAs(p, patternOffset)` adds alpha, compares `m_dashOffset` with the painter's current
       offset argument, requires a valid pen (`!FlagInvalid`) and **is the renderer's pen-cache
       key** (`lc_graphicviewrenderer.cpp` ×2, `lc_printpreviewviewrenderer.cpp`,
       `lc_printviewportrenderer.cpp`); `updateBy()` copies everything except `m_screenWidth`. Not
-      hashed anywhere.
-    - 98 `getLineType(` / 81 `setLineType(` lines in 50 files, counting declarations and the
+      hashed anywhere. The linetype identity joins that key as **one integer compare** (measured
+      0.23 ns, against 2.1–2.8 ns for a `QString` and 39.7 ns for a case-insensitive compare), which
+      is the whole reason it is an id and not a name (§4 step 4). Two pre-existing defects sit in the
+      same expression and are fixed **before** this ladder, as their own upstream PRs: the
+      dash-offset term (`rs_pen.h` · `RS_Pen::isSameAs`:
+      `LC_LineMath::isSameLength(m_dashOffset, patternOffset)`) defeats the cache for **100 % of
+      dashed entities** and is PR-0b's target, and the painter's unguarded dashed branch is PR-0a's
+      (§10).
+    - 102 `getLineType(` / 84 `setLineType(` lines in 50 files, counting declarations and the
       same-named members of `QG_LineTypeBox`, `QG_PenToolBar`, `LC_PenItem` and `LC_DimStyle`;
-      86 files mention `RS2::LineType` or those calls.
+      87 files mention `RS2::LineType` or those calls (re-measured at `1776b58be`; the render
+      study's §4.2 "75 files mentioning `RS2::LineType`" counts the enum alone, a narrower set than
+      "the enum **or** those calls" — both numbers are right, and neither replaces the other).
+      The "`setLineType(enum)` resets the identity" invariant of §4 step 4 applies to **all 84**
+      `setLineType(` sites, not only the six this plan enumerates — which is why that reset stays
+      inline and lookup-free.
     - Dead: `no_used/` ×6 and `rs_filterdxf.cpp` ×5 (in neither build list), plus
       `rs_python_wrappers.cpp` (in CMake, but its body is `#ifdef RS_OPT_PYTHON`, which is never
       defined).
@@ -238,7 +276,9 @@ are argued in **§2 Questions for maintainers (Phase 0 gate)**.
 
 | Item | State | Evidence |
 |---|---|---|
-| **Null deref** | `getPattern()` returns `nullptr` for an enum without an entry; the painter dereferences it unchecked (reproduced with a stale QSettings value) | `rs_painter.cpp` · `rsToQDashPattern` |
+| **Null deref** | `getPattern()` returns `nullptr` for an enum without an entry; the painter dereferences it unchecked (reproduced with a stale QSettings value); fixed pre-ladder by **PR-0a** (§10) | `rs_painter.cpp` · `rsToQDashPattern` |
+| **Dashed `QPen` rebuilt per entity** | the `Qt::CustomDashLine` branch builds a `QPen`, sets the dash pattern, assigns `m_lastUsedPen`, calls `QPainter::setPen` and **returns before** the `bool changed` block the solid path uses — measured: 200 000 `QPen` constructions for 200 000 dashed entities, 152.0 ns/call against the solid branch's 12.8 ns; fixed pre-ladder by **PR-0a** (§10) | `rs_painter.cpp` · `RS_Painter::setPen` |
+| **Pen cache dead for dashed pens** | `isSameAs` ends with `LC_LineMath::isSameLength(m_dashOffset, patternOffset)` while `updateDashOffset` moves that offset per drawn entity, so one dashed entity costs the #1922 cache for the rest of the frame (measured: 300 dashed lines → 300 `RS_Painter::setPen` calls; 1 dashed + 1999 solid → 2000; +54 ns/entity); fixed pre-ladder by **PR-0b** (§10) | `rs_pen.h` · `RS_Pen::isSameAs`; `rs_painter.cpp` · `updateDashOffset` |
 | Other pattern consumers | `LC_MakerCamSVG::svgPathAnyLineType / getLinePattern` reimplement the patterns with their own `switch` on the enum | `librecad/src/lib/generators/makercamsvg/lc_makercamsvg.cpp` |
 | Pixel test rig | `TestPainter` (QImage + `LC_GraphicViewport`) in `rs_hatch_tests.cpp` — reusable for dash-pattern pixel tests | `librecad/src/lib/engine/document/entities/tests/rs_hatch_tests.cpp` |
 
@@ -284,6 +324,16 @@ are argued in **§2 Questions for maintainers (Phase 0 gate)**.
     - All derive from `LC_GraphicViewportRenderer`, which holds `RS_Graphic* m_graphic` and
       `updateGraphicRelatedSettings(RS_Graphic*)` (reads `$DIMSCALE` there) — no document listener
       today.
+    - **Four of them copy the resolved pen twice before the cache can save anything**:
+      `RS_Pen pen = e->getPenResolved();` then `const RS_Pen originalPen = pen;` then the
+      `m_lastPaintEntityPen.isSameAs()` early return — verified in
+      `lc_graphicviewrenderer.cpp` · `setPenForEntity` and `setPenForDraftEntity`,
+      `lc_printpreviewviewrenderer.cpp` and `lc_printviewportrenderer.cpp` ·
+      `setPenForPrintingEntity`. Nothing between the copy and the return reads `originalPen`
+      (its only consumer, `m_lastPaintEntityPen.updateBy(originalPen)`, runs far below), so
+      every entity pays two full `sizeof(RS_Pen)` = 104-byte copies **even on a cache hit**.
+      That is the multiplier on any field the ladder later adds to `RS_Pen`; **PR-0b** hoists
+      the copy below the early return (§10).
     - Only four of them resolve a document pen with `getPenResolved()` (`setPenForEntity`,
       `setPenForDraftEntity`, both `setPenForPrintingEntity`); `LC_PrintViewportRenderer` also
       serves library thumbnails (`qg_librarywidget.cpp`).
@@ -308,6 +358,7 @@ are argued in **§2 Questions for maintainers (Phase 0 gate)**.
 | Item | State | Evidence |
 |---|---|---|
 | Clipboard / paste / library insert | copy **layers and blocks only** | `lc_copyutils.cpp`, `rs_modification.cpp` · `libraryInsert`, `rs_clipboard.cpp` |
+| Write-side losses beside the name | group 48 (`ltypeScale`), `PLINEGEN` (flag 128) and paper-space membership are parsed on import and dropped on save | `rs_filterdxfrw.cpp` · `setEntityAttributes` / `getEntityAttributes` / `addLWPolyline` / `writePolyline` |
 | Build systems | both first-class: every new file goes to the top `CMakeLists.txt` (explicit list) **and** to `librecad/src/src.pro`; tests are CMake-only (`librecad_dxf_fast_tests`, `librecad_dxf_roundtrip_tests`, `librecad_dwg_fast_tests`, `librecad_tests`) | `CMakeLists.txt`, `librecad/src/src.pro`, `.github/workflows/dwg-dxf-verify.yml` |
 
 *The remaining UI surfaces, in detail:*
@@ -360,9 +411,9 @@ are argued in **§2 Questions for maintainers (Phase 0 gate)**.
     without inserting anything; `hasLineType()` is unaffected. Evidence:
     `librecad/src/ui/dock_widgets/pen_palette/lc_peninforegistry.cpp`.
 - **Integer persistence (stay on the enum)** — `RS_Settings::writePen/readPen` (layer-tree default
-  pens, `FIXME` no validation), 11 concrete settings keys, the `.lcpp` palette, `$DIMLTYPE` and the
-  plugin API all persist the enum as an int.
-  - The four kinds of integer persistence:
+  pens, `FIXME` no validation), 11 concrete settings keys, the `.lcpp` palette, `$DIMLTYPE`, the
+  `.lcds` dimension-style export and the plugin API all persist the enum as an int.
+  - The five kinds of integer persistence:
     - The keys are 7 literals — `indicator_lines_line_type` (read in `rs_snapper.cpp`),
       `selection_overlay_line_type`, `selection_overlay_inverted_line_type` (`rs_overlaybox.cpp`),
       `metaGridPointsLineType`, `metaGridLinesLineType`, `GridLinesLineType` (`rs_grid.cpp`) —
@@ -370,10 +421,53 @@ are argued in **§2 Questions for maintainers (Phase 0 gate)**.
       (`lc_quickinfowidgetoptions.cpp`); and the 4 keys
       `pen{NormalLayer,DimensionalLayer,InfoLayer,AltPosLayer}LineType` generated by the
       `writePen/readPen` above (callers in `lc_layertreemodel_options.cpp`).
-    - `.lcpp` palette: `LC_PenPaletteData::toStringRepresentation`, exactly 4 fields, rejects
-      unknown ints.
-    - `$DIMLTYPE` as int group 70 (`lc_dimstyletovariablesmapper.cpp`; `$DIMLTEX1/2` written with
-      the int overload though read as strings).
+    - `.lcpp` palette: `LC_PenPaletteData::toStringRepresentation` writes exactly **4**
+      comma-separated fields (`PEN_DATA_FIELDS_SEPARATOR = ","`) — linetype int, width int,
+      colour, free-text pen name **last** — and `fromStringRepresentation` accepts exactly 4,
+      rejecting unknown ints. **A fifth field must not be appended**, and the plan does not:
+      verified in the tree, a 5-field line fails `stringParts.size() == 4`,
+      `fromStringRepresentation` returns `nullptr`, `loadItems` drops the row **and still
+      returns `true`** (so `createDefaultPens()` never runs), and the next `saveItems()` writes
+      the survivors back — the row is **deleted, not degraded**. The file is
+      `LC_GET_ONE_STR("Paths","OtherSettingsDir", RS_System::getAppDataDir()) +
+      "/penpalette.lcpp"`, an unversioned `QStandardPaths::AppDataLocation` directory that a
+      flatpak and a distro install share, so the deletion repeats on every alternation between
+      builds.
+    - **Spec, referenced by §2 and §6 step 7: version the palette file instead.** Phase 3
+      writes **`penpalette2.lcpp` beside the old file**, never a 5th field in it.
+      (1) *Migration*: when `penpalette2.lcpp` is absent the legacy `penpalette.lcpp` is read
+      and migrated once; the legacy file is then left untouched, so 2.2.1 keeps every pen it
+      already understands instead of losing rows to a format it cannot parse.
+      (2) *Fields*: `lineType,lineWidth,colour,lineTypeName,penName` — the linetype **name**
+      goes before the free-text pen name, which stays last, and every field percent-escapes
+      `,` as `%2C` and `%` as `%25`, which also fixes today's silent rejection of any pen name
+      containing a comma.
+      (3) *Form*: field 4 carries a **name**, never an interned id (§4 step 4 (iv)) — the
+      palette is read before any document exists, so nothing could resolve an id there, and
+      the name is matched against the document only when the pen is applied.
+      (4) *Naming*: `LC_PenItem`'s **new** member is `m_lineTypeRecordName` with
+      `getLineTypeRecordName()`. Verified in `lc_penitem.h`: the class already declares
+      `m_lineTypeName` **and** `getLineTypeName()` holding registry display text, spelled
+      exactly like the pen's accessor — reusing that spelling for an identity is how the two
+      get confused.
+    - `$DIMLTYPE` as an int at **group 70** — `lc_dimstyletovariablesmapper.cpp` ·
+      `toDictionary` (`vd->add("$DIMLTYPE", s->lineType(), 70)`) and `fromDictionary`
+      (`static_cast<RS2::LineType>(vd->getInt("$DIMLTYPE", …))`); `$DIMLTEX1/2` are written
+      with the int overload though read as strings. The int does not even survive a DXF save:
+      `RS_FilterDXFRW::writeHeader` forwards a `VariableInt` through `DRW_Header::addInt`,
+      while libdxfrw emits `$DIMLTYPE` only from a **string** variable (`drw_header.cpp`:
+      `getStr` → `writeUtf8Caps(6, …)` for R12, `writeUtf8String(6, …)` otherwise, and
+      `DRW_Header::getStr` returns false for a non-`STRING` variant), so an empty group 6 is
+      written instead — a header variable whose entity-level counterpart is a name. The raw
+      enum must stop being the stored form here; the fix belongs with the dimension-style work
+      of §8 step 2 (write the name, keep reading the int for files already written).
+    - `.lcds` dimension-style export/import: `LC_DimStylesExporter::exportStyles` serialises
+      the whole `RS_VariableDict` the mapper produced — one JSON object per variable with
+      `name`/`code`/`type`/`val` — so `$DIMLTYPE` travels as the **raw `RS2::LineType` int** in
+      a file users exchange between installs, and the import path casts it straight back.
+      Pair with **PR-0a** (§10): a `.lcds` (or a `QSettings` value) carrying one of the
+      master-only enum values 28–35 — the HIDDEN/PHANTOM size variants, in master and in no
+      release — reaches `getPattern()`'s null return and crashes 2.2.1 on the first paint.
     - Plugins: `DPI::LineType` in `document_interface.h`, **different numbering** from
       `RS2::LineType`, direct cast in `Doc_plugin_interface::getCurrentLayerProperties`; the string
       bridge `convLTW` (`doc_plugin_interface.cpp`) exchanges LibreCAD enum spellings
@@ -382,6 +476,25 @@ are argued in **§2 Questions for maintainers (Phase 0 gate)**.
       `BorderLine2/X2` both map to "BorderLine". `Plugin_Entity::getData` → `updateData`
       round-trips it: `plugins/sameprop` copies `DPI::LTYPE` verbatim to other entities through
       `updateData`; `list` and `divide` print it.
+- **Write-side losses beside the name** — each parsed on import and dropped on save, and each
+  reads as a *new* regression the moment Phase 1 makes a machine trust what LibreCAD writes:
+  - **Group 48 (`ltypeScale`)**: libdxfrw parses it into `DRW_Entity::ltypeScale` on both
+    paths, `setEntityAttributes` never reads it and `getEntityAttributes` never writes it
+    (verified: the only `ltypeScale` traffic in `rs_filterdxfrw.cpp` is the opaque
+    INSERT/ATTRIB MTEXT sidecar). After Phase 1 the machine reads the right name with a
+    silently reset scale. The cheap fix is that same sidecar pattern, which the codebase
+    already ships — not Phase 6.
+  - **`PLINEGEN` (flag 128)**: `RS_FilterDXFRW::addLWPolyline` reads `data.flags & 0x1` only
+    and `RS_FilterDXFRW::writePolyline` sets `pol.flags = 1` for closed and nothing else
+    (verified), so a `PLINEGEN=1` polyline is written back as 0 — libdxfrw itself carries the
+    bit (`drw_entities.cpp`: DXF 128 ↔ DWG `0x100`). Kept a non-goal in §12, listed here
+    because it is a linetype-shaped attribute that dies on our side of the filter.
+  - **Paper-space membership**: libdxfrw parses group 67 into `DRW_Entity::space`
+    (`drw_entities.cpp`; DWG `entmode` likewise), the filter never reads it on import and
+    never sets it on export, and `RS_Entity` has no space attribute at all — so layout
+    entities are flattened into model space and a layout's linetype name travels into model
+    space with them. That flattening, not a decision about scaling, is why `$PSLTSCALE` is
+    moot for LibreCAD output (§12).
 - **Dialog plumbing** — `QG_WidgetPen::setPen(...)` receives no document, and the `QG_DialogFactory`
   layer and attribute requests carry no graphic either.
   - Which requests carry a document and which do not:
@@ -469,7 +582,9 @@ librecad/src/lib/engine/document/linetypes/                 ← NEW (Phase 1)
 │                                     pattern (std::vector<double>: +dash, −gap, 0 = dot),
 │                                     patternLength (group 40), flags (70), builtin, hasImportedRecord,
 │                                     legacyType (enum cache); clone(), fromDrw()/toDrw(),
-│                                     isByLayer()/isByBlock(), key() (NFC + ASCII-only upper-case fold);
+│                                     isByLayer()/isByBlock(), key() (NFC + ASCII-only upper-case fold — the
+│                                     intern table's fold id is computed with this same key(), so the document
+│                                     table and pen equality cannot disagree about what counts as one name);
 │                                     static isValidName(name, QString* reason), added by Phase 4 (§7)
 ├── lc_linetypelist.h / .cpp          LC_LineTypeList: the document table (RS_LayerList shape; count/at/
 │                                     begin/end; find() is case-insensitive; add() returns the survivor,
@@ -487,13 +602,23 @@ librecad/src/lib/engine/document/linetypes/                 ← NEW (Phase 1)
 │                                     lc_dimstyle.cpp / rs_filterjww.cpp / rs_filtershp.cpp stop depending on it;
 │                                     plain static class or namespace (LC_DimArrowRegistry is the shape precedent,
 │                                     minus its QObject base)
+├── lc_linetypeintern.h / .cpp        LC_LineTypeIntern: the process-wide id ↔ spelling table behind the pen's
+│                                     std::uint16_t handle — append-only, never reused or freed, main-thread only,
+│                                     65 535 spellings; id 0 is reserved, never appears in the table and means
+│                                     "the canonical name of m_lineType"; per id it keeps the literal spelling AND
+│                                     a fold id (the first id interned for that folded key, computed with
+│                                     LC_LineType::key()), and pen equality compares the fold id; it maps NO
+│                                     patterns — the document table still maps folded spelling → pattern. Only
+│                                     rs_pen.cpp includes it, so setLineType(enum) stays inline and lookup-free
 └── lc_linfile.h / .cpp               Phase 4: .lin reader/writer, beside the table it feeds — fonts/rs_font.cpp
                                       and patterns/rs_pattern.cpp parse their own definition files the same way;
                                       lib/fileio/ holds only RS_FileIO and LC_FileNameSelectionService
 
-librecad/src/lib/engine/rs_pen.h                              ← + QString m_lineTypeName (authoritative);
-                                                                 m_lineType stays as cache; ==, isSameAs, updateBy,
-                                                                 setLineTypeFromPen carry the name
+librecad/src/lib/engine/rs_pen.h                              ← + std::uint16_t m_lineTypeId (interned handle; the
+                                                                 NAME is the identity and the only persisted form,
+                                                                 the id never leaves the process); m_lineType stays
+                                                                 as cache; ==, isSameAs, updateBy,
+                                                                 setLineTypeFromPen carry the id
 librecad/src/lib/engine/document/rs_graphic.{h,cpp}           ← + m_lineTypeList, wrappers, seeding in
                                                                  initForNewDocument(), isModified() includes it
 librecad/src/lib/engine/document/rs_document.h                ← + virtual LC_LineTypeList* getLineTypeList() = 0
@@ -557,10 +682,11 @@ plus `RS_ActionOptionsDrawing(ctx, tabIndex)` address pages by runtime index —
 `tabDims` silently retargets them. Appended after `tabVars` = `.ui` index 10, runtime index 9.
 
 **Data flow after this plan**: DXF/DWG `LTYPE` record → `RS_FilterDXFRW::addLType` → `LC_LineTypeList`
-(+ raw `DRW_LType` kept in metadata for sidecars) · entity/layer group 6 → `RS_Pen::m_lineTypeName`
-(enum cache = nearest built-in) · render: pen name → `LC_LineTypeList::find` → pattern → `RS_Painter`
-· save: `writeLTypes()` walks the table and every name referenced by entities/layers/dim styles, then
-entities write `pen.getLineTypeName()` verbatim.
+(+ raw `DRW_LType` kept in metadata for sidecars) · entity/layer group 6 → `RS_Pen::m_lineTypeId`
+(the interned spelling; enum cache = nearest built-in) · render: pen id → fold id → `LC_LineTypeList`
+entry → pattern → `RS_Painter` · save: `writeLTypes()` walks the table and every name referenced by
+entities/layers/dim styles, then entities write `pen.getLineTypeName()` verbatim — **the id is never
+written**, to any file, palette or setting.
 
 **Why a document table rather than global `.lin` lists** (recap): the DXF/DWG file *is* the
 contract with the machine — its LTYPE table must contain exactly the names the entities use; a
@@ -641,7 +767,7 @@ after every phase, minus intended changes. `librecad_dwg_write_fast_tests` is pa
 
 | Phase | CMake touchpoints | qmake6 touchpoints |
 |---|---|---|
-| 1 | new `linetypes/` include dir + three `.cpp`/`.h` pairs into `librecad_lib`, plus the new test units | new `INCLUDEPATH` + `HEADERS`/`SOURCES` in `src.pro` |
+| 1 | new `linetypes/` include dir + **four** `.cpp`/`.h` pairs into `librecad_lib`, plus the new test units | new `INCLUDEPATH` + `HEADERS`/`SOURCES` in `src.pro` |
 | 2 | one new test unit only (no product file added) | none (tests are CMake-only) |
 | 3 | one new test unit only (no product file added) | none (tests are CMake-only) |
 | 4 | `lc_linfile` + the dialog's include dir, sources and test unit | `INCLUDEPATH` + `HEADERS`/`SOURCES`/`FORMS` in `src.pro` |
@@ -650,13 +776,16 @@ after every phase, minus intended changes. `librecad_dwg_write_fast_tests` is pa
 *What each cell means, phase by phase:*
 
 - **Phase 1 — CMake.** `librecad/src/lib/engine/document/linetypes` into `SHARED_INCLUDES` (beside
-  `…/document/layers`); the `lc_linetype*`, `lc_linetypelist*`, `lc_linetypenames` `.cpp`/`.h` pairs
-  into `SHARED_SOURCES` (feeds `librecad_lib`); `linetypes/tests/lc_linetypelist_tests.cpp` — plus
+  `…/document/layers`); the `lc_linetype*`, `lc_linetypelist*`, `lc_linetypenames`,
+  `lc_linetypeintern` `.cpp`/`.h` pairs into `SHARED_SOURCES` (feeds `librecad_lib`);
+  `linetypes/tests/lc_linetypelist_tests.cpp` — plus
   any new `librecad_tests` TU of T10 and T11 — as a repo-root-relative path in the
   `qt_add_executable(librecad_tests …)` source list; the new `tests/` directory itself goes into no
   list.
   - **qmake6**: `INCLUDEPATH += lib/engine/document/linetypes` (beside `lib/engine/document/layers`)
-    plus `HEADERS`/`SOURCES` in `src.pro`; the test file is not listed.
+    plus `HEADERS`/`SOURCES` in `src.pro` — the same **four** pairs, `lc_linetypeintern` included, or
+    the dual-build policy this very section states is broken by the plan that states it; the test
+    file is not listed.
 - **Phase 2 — CMake.** No product file added (edits to registered files); the new test unit
   `librecad/src/lib/gui/render/tests/lc_linetype_render_tests.cpp` into the
   `qt_add_executable(librecad_tests …)` source list only (§5 step 6) — `lib/gui/render` is already in
@@ -676,8 +805,10 @@ after every phase, minus intended changes. `librecad_dwg_write_fast_tests` is pa
     `.ui`) in `src.pro`; `TRANSLATIONS` untouched (strings picked up by `lupdate`); the test file is
     not listed.
 
-**Full-rebuild warning**: `rs_pen.h` and `rs.h` are included by ~820 translation units; Phase 1
-recompiles everything once (~40 min at `-j12` on the reference machine). Later phases are incremental.
+**Full-rebuild warning**: `rs_pen.h` is included by **699 translation units** (measured in the
+RelWithDebInfo build of the render study; the fan-out of `rs.h` was never measured and is not claimed
+here); Phase 1 recompiles everything once (~40 min at `-j12` on the reference machine). Later phases
+are incremental.
 
 ---
 
@@ -689,7 +820,7 @@ reasonable silence plus explicit agreement to proceed.
 | # | Question | Proposed answer | Who decides |
 |---|---|---|---|
 | 1 | Document-owned linetype table (like layers) or global `.lin` lists that seed every drawing (QCAD does both)? | **Document table as truth; `.lin` only imported into it**; the built-in set seeds every document | Maintainers — blocks Phase 1 |
-| 2 | Pen identity: name + cached enum (**A**) or a sentinel enum value `RS2::CustomLine` (**B**)? | **A** | Maintainers — blocks Phase 1 |
+| 2 | Pen identity: the literal name in the pen + cached enum (**A**), a sentinel enum value `RS2::CustomLine` (**B**), or an **interned 16-bit id** in the pen whose spelling is that name (**C**)? | **C** (measured; **A** with interning enforced is the documented fallback) | Maintainers — blocks Phase 1 |
 | 3 | Units for custom patterns when drawing | **Device mm, identical to the built-ins (Phase 2, the phase that starts drawing them)**; `$LTSCALE`/drawing-unit/group-48 mode as an optional Phase 6 | Maintainers; default applies on silence |
 | 4 | Aliases (`ACAD_ISO09W100`, `HIDDEN2`…): keep the literal name or canonicalise on save? | **Keep literal** (enum cache still points at the family for icons/legacy) | Maintainers; default applies on silence |
 | 5 | Name referenced by an entity/layer but no LTYPE record in the file | **Create a marker record** (`73`=0, `40`=0 like CONTINUOUS; a drawable built-in alias copies its family's metrics, §4 step 6) and write it back | Maintainers; default applies on silence |
@@ -712,9 +843,50 @@ Why each answer (the full reasoning the table indexes):
   - Linetypes reuse that shape for *sourcing* definitions — `support/linetypes/*.lin` + user dir,
     enumerated by a new `RS_System::getLineTypeFileList()` — and the Phase 4 dialog imports from
     the catalogue or from any file.
-- **Q2 — Name + cached enum (A) vs a `RS2::CustomLine` sentinel (B).** B still needs every consumer
-  patched (`getPattern()` → nullptr, `findData()` → −1, `hasLineType()` false, `DPI::LineType` cast
-  out of range, `readPen`) and loses the name anyway.
+- **Q2 — the literal name in the pen (A) vs a `RS2::CustomLine` sentinel (B) vs an interned id (C).**
+  B still needs every consumer patched (`getPattern()` → nullptr, `findData()` → −1,
+  `hasLineType()` false, `DPI::LineType` cast out of range, `readPen`) and loses the name anyway.
+  Between **A** and **C** the answer is measured, not argued: four real builds of `RS_Pen`, fully
+  rebuilt and benchmarked with `tools/lc_render_bench.py --procs 9 --reps 5` (render study §6.1).
+  Its spike labels are **not** this question's option letters — the mapping, once, so no unqualified
+  letter is left ambiguous: **spike A = Q2 option A**, **spike A2 = option A with the spellings
+  interned = fallback (a′) below**, **spike B = Q2 option C**, **spike C = Q2 option A plus the
+  Phase-2 per-entity lookup**.
+
+  | Measure | spike A = **Q2 A** | spike A2 = **(a′)** | spike B = **Q2 C** | spike C = **Q2 A + lookup** |
+  |---|---:|---:|---:|---:|
+  | `sizeof(RS_Pen)` | 128 (+24) | 128 (+24) | **104 (unchanged)** | 128 (+24) |
+  | Fit rows, median Δ (noise floor ±1.8 %) | +2.1 % | +3.1 % | **+0.5 %** | +3.2 % |
+  | Worst measured row (`200000/mixed/zoom40`) | **+84.0 %** (reproduced) | −12.5 % | **−2.3 %** | +85.9 % |
+  | Peak RSS @200k | +8.3 % | +2.3 % | **+0.7 %** | +8.3 % |
+  | DXF import @200k | +8.2 % | +3.0 % | **+1.0 %** | +7.0 % |
+  | Pen-cache key compare | 2.1–2.8 ns | 2.1 ns | **0.23 ns** | 2.1–2.8 ns |
+
+  The LD_PRELOAD pen counts were byte-identical to baseline for all four variants on all 18
+  configs, so each patch changed the *cost* of the pen cache and never its hit rate. A's +84 % is
+  **one heap allocation per pen at import**, not the comparison: A2 has the same `sizeof`, the same
+  semantics and the same name inside every comparison, and the pathological row disappears.
+  - **Why an id is safe here, where a document-scoped id or a pointer is not.** The intern table
+    maps **id ↔ spelling**, is **process-wide, append-only and never reused or freed**, and does
+    **not** map id → pattern — the *document* table still maps folded spelling → pattern and stays
+    the truth (§4 step 4). So an id means the same spelling in **every** document, including
+    `RS_Clipboard`'s singleton graphic whose clones outlive their source document, and an index into
+    an immortal table cannot dangle. A pointer or an index into a *document's* table dangles exactly
+    there, and at `LC_ActionBlockLibraryInsert::reset()`, which deletes its source graphic outright
+    (§12).
+  - **Stated costs, so nobody is surprised later**: **65 535** distinct spellings per process, with
+    the explicit overflow policy of §4 step 4; interning is **main-thread-only** and therefore
+    non-atomic (nothing in `librecad/src` is multi-threaded — verified repo-wide — which this plan
+    turns from an observation into an invariant); one hash per entity at import, never per frame;
+    and a pen inspected in a debugger no longer shows its name. The honest headline is "no
+    measurable cost" (+0.5 % against a ±1.8 % floor), not "zero cost".
+  - **Fallback (a′) if maintainers refuse an integer in `RS_Pen`**: option A with interning
+    *enforced* — the filter hands the pen the table entry's own `QString` **and** PR-1 carries a test
+    that two entities with the same spelling share a buffer (compare `QString` data pointers; §11).
+    Measured +3.1 % on fit rows, no pathological row, +2.3 % RSS: worse than C on every axis and
+    acceptable on all of them. Option A *without* that test — a fresh `QString` per entity, the way
+    `setEntityAttributes` builds layer and colour names today — is the one configuration the
+    measurements reject.
 - **Q3 — Units for custom patterns.** Zero new semantics, consistent look, nothing changes for the
   built-in families; the AutoCAD mode changes how every existing drawing looks and deserves its own
   discussion (#1476). **Consequence stated up front**: group-49 values are drawn as device
@@ -758,10 +930,19 @@ Decided on our side (documented, easy to flip):
   consider. Neither may write to the table: Phase 1 ORs `LC_LineTypeList::isModified()` into
   `RS_Graphic::isModified()`, so importing there would make merely clicking a window (or opening a file,
   which ends in the same slot) prompt "save changes?" on close and wake `autoSaveGraphic()`.
+  - **Consequence once the pen carries an identity**: that same
+    `slotWindowActivated` → `slotPenChanged` → `setActivePen` chain puts **document A's linetype on
+    document B's first drawn entity**, with no snapshot behind it — `LC_UndoSection::setupAndUndoableAdd`
+    stamps `graphic->getActivePen()` onto every new entity. The interned id makes that harmless
+    rather than dangerous: the spelling is process-wide, so it still resolves in B, the name survives
+    to the file, and the Q5 marker rule applies at save (name kept, pattern empty). The path is
+    covered by its own §3 case beside T11.
 - **A name missing in the target is shown, not imported**: the temporary row of Phase 3 step 1,
   "NAME (not defined in this drawing)". `QG_PenToolBar` and `LC_PenItem` keep an `LC_LineType` snapshot
   (name, description, pattern) taken when the user picked that row, so no import ever depends on the
-  source document still being open.
+  source document still being open. The snapshot stays keyed by **name** — it has to survive its
+  source document — and **no id is ever stored in a snapshot or in a palette row**: the id is an
+  in-process handle, the name is the portable form (§4 step 4, §12).
 - **Lazy import on first use**: the record enters the table when an entity actually carries the name —
   `LC_UndoSection::setupAndUndoableAdd` (where `graphic->getActivePen()` is applied) and
   `RS_Modification::changeAttributes` — through `RS_Graphic::ensureLineType(const LC_LineType&)` called
@@ -769,12 +950,18 @@ Decided on our side (documented, easy to flip):
   (the target already has the name, case-insensitively): the target record wins, no write. With no
   snapshot available (a palette pen restored from file carries a name only) the Q5 marker rule applies
   at save.
-- **Palette file**: `penpalette.lcpp` lines gain an optional 5th field (linetype name), written **only**
-  when the name is not `lineTypeToName(cached enum)`; the parser accepts 4 or 5 fields. Older builds skip
-  a 5-field line silently (`LC_PenPaletteData::fromStringRepresentation` requires exactly 4, `loadItems`
-  drops the `nullptr`, and a later `saveItems` persists the loss), so a palette holding only built-in
-  types stays byte-identical and fully interoperable, and only custom-type pens are invisible to 2.2.1 —
-  stated in the PR.
+- **Palette file**: the palette is **versioned as a new file**, never grown by a 5th field. Phase 3
+  writes `penpalette2.lcpp` beside the legacy `penpalette.lcpp`, reads the legacy file once to migrate
+  it and then leaves it untouched; §0.4 carries the spec (field order
+  `lineType,lineWidth,colour,lineTypeName,penName`, percent-escaped separators, the `LC_PenItem`
+  member named `m_lineTypeRecordName`). An earlier draft of this plan appended an optional 5th field
+  to the old file, and the tree refuses it: verified, a 5-field line fails `stringParts.size() == 4`,
+  `LC_PenPaletteData::fromStringRepresentation` returns `nullptr`, `loadItems` drops the row **and
+  still returns `true`** (so `createDefaultPens()` never runs), and the next `saveItems()` writes the
+  loss back — the row is **deleted, not degraded**, in an unversioned `AppDataLocation` directory a
+  flatpak and a distro install share, so the loss repeats on every alternation between builds. With
+  the new file, a pen carrying a custom linetype name is merely invisible to 2.2.1 instead of being
+  destroyed by it — stated in the PR.
 
 ---
 
@@ -802,6 +989,9 @@ failing tests so Phase 1 is measured, not argued.
      with a text segment (`74`=2, `75`, `340` = the handle of a `STYLE` record present in the
      same fixture, `46/50/44/45`, `9 GAS`) and a `102 {APP … 310 … 102 }` group; a `VENDOR_TAB`
      record and a `DIMSTYLE` whose `345` points at its handle; one entity on `VENDOR_CPLX`.
+     For **T17**, an `OBJECTS` section holding an `MLINESTYLE` whose element carries `6 VENDOR_MLS`
+     — the repeated `49`/`62`/`6` element shape the existing raw-net case already writes — and an
+     `MLEADERSTYLE` whose leader linetype resolves to `VENDOR_MLD`, neither with an LTYPE record.
      Complex segments and app data are R13+ groups and a record there needs a non-zero handle
      (`dxfTableEntryComplete`), so this case does not belong in the R12 string.
 3. **Local acceptance fixture** (not upstream): the vendor "DXF drawing rules" file (R12, 46
@@ -817,7 +1007,7 @@ failing tests so Phase 1 is measured, not argued.
    `test-results/named-linetypes/fixtures/` (its real filename is recorded in that directory's
    `README.md`; this document stays vendor-free) with a reference dump — that dump lists 48 LTYPE
    lines because ezdxf adds synthetic `ByBlock`/`ByLayer` entries.
-4. **Red tests T1–T15**, one line each in the table; their assertions, sub-cases and fixture strings
+4. **Red tests T1–T17**, one line each in the table; their assertions, sub-cases and fixture strings
    are unchanged, in the collapsed block below it. Default home is `dxf_roundtrip_tests.cpp` tagged
    `[linetype][named]` — that TU is compiled into `librecad_tests`, `librecad_fast_tests`,
    `librecad_dxf_fast_tests` and the micro target `librecad_dxf_roundtrip_tests` (CMakeLists.txt ·
@@ -829,27 +1019,32 @@ failing tests so Phase 1 is measured, not argued.
 
    | # | What it proves | Home |
    |---|---|---|
-   | T1 | An imported custom name reaches the pen, the enum cache and the list pattern | dxf round-trip |
+   | T1 | An imported custom name reaches the pen's interned identity, the enum cache and the list pattern | dxf round-trip |
    | T2 | Export, re-import and re-export are stable: one record, group 6 on entity and layer | dxf round-trip · both DXF versions |
    | T3 | A name with no record survives as an empty marker on entity, layer and block member (Q5) | dxf round-trip (+ DWG under `DWGSUPPORT`) |
    | T4 | Any spelling of one name folds to a single list entry and a single written record | dxf round-trip · both DXF versions |
    | T5 | An ISO alias keeps its literal name instead of being written back as `PHANTOM` | dxf round-trip |
    | T6 | Every `RS2::LineType` still round-trips through `lineTypeToName`/`nameToLineType` | dxf round-trip · extends the existing case |
-   | T7 | The name takes part in pen equality and copying, and a fresh list is 35 unmodified entries | `librecad_tests` · new `lc_linetypelist_tests.cpp` |
+   | T7 | The identity takes part in pen equality and copying, the intern table holds its invariants, and a fresh list is 35 unmodified entries | `librecad_tests` · new `lc_linetypelist_tests.cpp` |
    | T8 | A complex record — text segment, app data — travels through export opaque | dxf round-trip · AC1015 (R12 for T8b) |
    | T9 | A file that redefines a built-in renders seeded and writes the file's own metrics back | dxf round-trip |
-   | T10 | Block-insert expansion and `changeAttributes` copy the name, not only the enum | `librecad_tests` · new TU |
+   | T10 | Block-insert expansion and `changeAttributes` copy the identity, not only the enum | `librecad_tests` · new TU |
    | T11 | `QG_WidgetPen` keeps an unknown name through both `setPen` overloads | `librecad_tests` · offscreen |
    | T12 | A `DIMSTYLE` `345` reference resolves back to the named linetype; DWG stays a gap | dxf round-trip · `[dimstyle]` |
    | T13 | Edge patterns and names are written verbatim, so the render normaliser never leaks | dxf round-trip (+ `i18n_caret_nfc_tests.cpp`) |
    | T14 | The QCad-1 reader keeps group 6 and synthesises a marker for it | dxf round-trip · `[dxf1]` |
    | T15 | The SHP `LTYPE` column reaches the pen and is exported as a marker | `librecad_tests` · `shp_import_filter_tests.cpp` |
+   | T16 | A window switch carries the active pen's identity into another document, and the name survives the save | `librecad_tests` · beside T10 (+ dxf round-trip) |
+   | T17 | Names referenced only by an `MLINESTYLE` element or an `MLEADER`/`MLEADERSTYLE` reach the walk — without them the DWG save **fails** | dxf round-trip (+ DWG under `DWGSUPPORT`) |
 
    <details>
-   <summary>T1–T15 — assertions, sub-cases and fixture strings (unchanged)</summary>
+   <summary>T1–T17 — assertions, sub-cases and fixture strings</summary>
 
-   - **T1 import keeps the name**: entity pen `getLineTypeName() == "VENDOR_TAB"`; enum cache
-     `SolidLine`; `graphic->findLineType("VENDOR_TAB")->pattern == {20,-20}`.
+   - **T1 import keeps the name**: entity pen `getLineTypeName() == "VENDOR_TAB"` and
+     `getLineTypeId() != 0`; enum cache `SolidLine`;
+     `graphic->findLineType("VENDOR_TAB")->pattern == {20,-20}`. This is exactly the case §5 step 2
+     gates on: the cached enum **is** `SolidLine`, so only the identity distinguishes the pen, and a
+     resolution order that consulted the enum first would draw it solid forever.
    - **T2 round-trip**, run twice over the export version as `dxf_object_tests.cpp` does —
      `RS2::FormatDXFRW` (AC1021) and `RS2::FormatDXFRW12` (AC1009, the machine format): export
      writes `6/VENDOR_TAB` on the entity and on the layer, the LTYPE record with `73`=2, `40`=40,
@@ -870,8 +1065,11 @@ failing tests so Phase 1 is measured, not argued.
      carries the DASHED metrics (`49` = 12.7,−6.35), so the file stays valid and the entity still
      renders dashed after Phase 2 — an empty marker would turn it solid; (c) a name that only
      ever reached a pen in memory (`setLineTypeName`, no table entry) whose single entity is
-     deleted (undoable) → export synthesises no record for it, undo → it is synthesised again;
-     an *imported* marker is a table entry and is still written, like an unused layer; (d) under
+     deleted (undoable) → export synthesises no record for it, undo → it is synthesised again.
+     Interning creates an **identity, never a table entry**: `setLineTypeName` mints (or reuses) an
+     id, and an id is not table membership — export still synthesises only from the referenced-name
+     walk of §4 step 7; an *imported* marker is a table entry and is still written, like an unused
+     layer; (d) under
      `DWGSUPPORT`, after `FormatDWG2004` export and re-import,
      `REQUIRE(fromDwg.findLineType("VENDOR_NOREC") != nullptr)` with an empty pattern, the entity
      keeps `VENDOR_NOREC` with enum `SolidLine`,
@@ -883,30 +1081,51 @@ failing tests so Phase 1 is measured, not argued.
      dash-only — `dxfRW::writeTableEntryAppData` fails the whole write below `AC1014`.
    - **T4 case folding** (both lanes): `Vendor_mixedCase` record + entity `6/VENDOR_MIXEDCASE`
      resolve to one list entry; export writes one record. AC1021: the record keeps
-     `Vendor_mixedCase`, the entity its literal `VENDOR_MIXEDCASE`. R12: record, layer and entity
+     `Vendor_mixedCase`, the entity its literal `VENDOR_MIXEDCASE` — the two-level rule of §4 step 4,
+     pinned here: **two interned spellings, two ids, one fold id, one table entry**; each pen writes
+     its own spelling, and the two pens compare **equal**. R12: record, layer and entity
      group 6 come out `VENDOR_MIXEDCASE`, `ltypeRecordGroupValues(out12,"Vendor_mixedCase","49")`
      is empty (the helper is case-sensitive), `recordGroupValues(out12,"LTYPE","5").empty()`,
      re-import gives `findLineType("vendor_mixedcase") != nullptr` with the same
      `countLineTypes()`, and a second R12 export is byte-equal to the first. A second record
      `VENDOR_MIXEDCASE [30,-30]` in the same file is dropped and the first pattern survives
      (first record wins, §11). Under `DWGSUPPORT` the entity comes back with the **record**
-     spelling (`dwgReader::parseAttribs` copies `lt->name`) and resolves to the same entry.
+     spelling (`dwgReader::parseAttribs` copies `lt->name`) and resolves to the same entry — so the
+     re-imported pen holds a **different raw id** from the pre-export pen and the **same fold id**:
+     assert the fold, never the raw id.
    - **T5 literal alias**: `ACAD_ISO09W100` entity → name `ACAD_ISO09W100`, enum `PhantomLine`;
      export writes `6/ACAD_ISO09W100` (replaces the current "writes it back as PHANTOM" test);
-     the R12 lane writes the same name (already upper-case).
+     the R12 lane writes the same name (already upper-case). Its fold id is **non-zero**, because
+     the alias does not fold to `PHANTOM` — that is precisely what keeps the literal name on export
+     (§4 step 4, T7).
    - **T6 built-in invariant** (extend the existing test): for every `RS2::LineType` value,
-     `getLineTypeName()` after `setLineType(v)` equals `lineTypeToName(v)`, and for the 35
-     built-in names `nameToLineType(getLineTypeName()) == v`. `NoPen`, `LineTypeUnchanged` and
+     `getLineTypeName()` after `setLineType(v)` equals `lineTypeToName(v)` **and
+     `getLineTypeId() == 0`** — the invariant that keeps all 84 `setLineType(` call sites honest
+     (§0.2, §4 step 4) — and for the 35 built-in names `nameToLineType(getLineTypeName()) == v`.
+     `NoPen`, `LineTypeUnchanged` and
      `LineSelected` report `"CONTINUOUS"`, exactly as `lineTypeToName()` does today.
    - **T7 pen and list semantics** (`librecad_tests`): two pens with the same enum and different
-     names are `!=` and not `isSameAs`; `updateBy`/`setLineTypeFromPen` copy the name;
-     `RS_Pen(RS2::FlagInvalid)` with the flag cleared `== RS_Pen(black, Width00, SolidLine)`;
-     `RS_Pen(c,w,NoPen) != RS_Pen(c,w,SolidLine)` and `isSameAs` another `NoPen` pen;
-     `setLineTypeName("continuous")` equals a `SolidLine` pen; `setLineTypeName("")` equals the
-     default pen, and so does a pen built from an empty imported name;
-     `setLineTypeName("ACAD_ISO09W100")` → `getLineType() == RS2::PhantomLine`;
-     `setLineTypeName("bylayer")` → `isLineTypeByLayer()`; an entity imported with `6/BYLAYER`
-     equals `RS_Pen()` and is written back as `ByLayer`, unchanged from today. List: a
+     identities are `!=` and not `isSameAs`; `updateBy`/`setLineTypeFromPen` copy the id;
+     `RS_Pen(RS2::FlagInvalid)` with the flag cleared `== RS_Pen(black, Width00, SolidLine)` **and
+     `getLineTypeId() == 0`**; `RS_Pen(c,w,NoPen) != RS_Pen(c,w,SolidLine)` and `isSameAs` another
+     `NoPen` pen; `setLineTypeName("continuous")` equals a `SolidLine` pen and
+     `setLineTypeName("")` equals the default pen, and so does a pen built from an empty imported
+     name — both hold **only** under the two rules of §4 step 4: a spelling that folds to the
+     canonical name of its mapped enum shares **fold id 0**, and an empty or whitespace-only
+     argument resets the id to 0 outright;
+     `setLineTypeName("ACAD_ISO09W100")` → `getLineType() == RS2::PhantomLine` with a **non-zero**
+     fold id (it does not fold to `PHANTOM`, which is what keeps its literal name on export, T5);
+     `setLineTypeName("bylayer")` → `isLineTypeByLayer()` with **id 0**; an entity imported with
+     `6/BYLAYER` equals `RS_Pen()` and is written back as `ByLayer`, unchanged from today.
+     **Intern-table invariants**, in the same case: id 0 is reserved and never appears in the table;
+     re-interning one spelling returns the **same** id; `setLineType(enum)` resets the id; a spelling
+     refused by `LC_LineType::isValidName` (§7 step 1) never consumes one; and a clone that outlives
+     its source graphic — `RS_Clipboard`'s singleton, and an entity whose source is deleted by
+     `LC_ActionBlockLibraryInsert::reset()` — still reports its name.
+     **Glyph pens carry no identity**: `RS_Pen(RS2::FlagInvalid)` and every pen of the `unicode.lff`
+     glyph cache (6543 letters / 32 869 glyph polylines, all carrying an `RS_Pen`) report
+     `getLineTypeId() == 0`, so font loading interns nothing and the table cannot grow per glyph.
+     List: a
      **default-constructed** `RS_Graphic g;` (no `initForNewDocument()`, no import) has 35 entries
      with `isModified()` false; `initForNewDocument()` twice → still 35, no duplicates, still not
      modified; `addLineType` of a custom entry flips it; a bare `RS_Graphic` with one
@@ -920,10 +1139,16 @@ failing tests so Phase 1 is measured, not argued.
      the `102 {APP … 310 …}` group survives, `73` is written once, and
      `CHECK(recordGroupValues(out,"LINE","6") == std::vector<std::string>{"VENDOR_CPLX"})`.
      **Not byte-wise**: `5`/`330`/`100` are minted and `DRW_LType::update()` recomputes `73`/`40`.
-     The `340` style handle is deliberately **not** asserted — `writeLineType` re-emits the source
-     handle while `writeTextstyle` mints fresh STYLE handles (it runs after `writeLTypes`), so it
-     dangles today; a documented gap (§2 Q6), fixable later by remapping through the text-style
-     map or clearing `shapeFlags` on write. **T8b**: the same document exported with
+     The `340` style handle **is** asserted, because §4 step 7 repairs it inside this ladder:
+     master re-emits the archived record's *source* style handle while the STYLE table is written
+     later (`libdxfrw.cpp` · `dxfRW::writeTables` calls `iface->writeLTypes()` before
+     `iface->writeTextstyles()`), so today's output carries a `340` that no written STYLE record
+     answers — harmless while the entity loses the name and the record is an orphan, not harmless
+     once these records are entity-referenced. The assertion is the repaired **invariant**, never a
+     literal handle: either the record carries no `340` at all (the dash-only fallback of §4
+     step 7, which is already what R12 export produces — `dxfRW::writeLineType` gates
+     `74`/`75`/`340`/`46`/`50`/`44`/`45` on `version > AC1009`), or its value is one of
+     `recordGroupValues(out,"STYLE","5")`. **T8b**: the same document exported with
      `RS2::FormatDXFRW12` writes the `49` list only and no `74` group (`writeLineType` gates the
      segment groups on `version > AC1009`), and a re-import keeps the name.
    - **T9 built-in name redefined by the file**: the `HIDDEN [64,-32]` record plus a `6/HIDDEN`
@@ -936,7 +1161,9 @@ failing tests so Phase 1 is measured, not argued.
    - **T10 name propagation through the engine copy sites** (`librecad_tests`,
      `[linetype][named]`): (a) a ByBlock line inside a block inserted with a pen
      `setLineTypeName("VENDOR_TAB")` → the expanded entity's
-     `getPen(false).getLineTypeName() == "VENDOR_TAB"` (mirrors `block_insert_wipeout_tests.cpp`;
+     `getPen(false).getLineTypeName() == "VENDOR_TAB"` **and the identical id**, not merely an equal
+     spelling — that is what proves `rs_insert.cpp` · `updatePen()` copies the identity instead of
+     re-deriving it (mirrors `block_insert_wipeout_tests.cpp`;
      `rs_insert.cpp` · file-local `updatePen()` copies the enum today); (b)
      `RS_Modification::changeAttributes` with a named `data.pen` and `changeLineType = true` →
      the replacement entity keeps `VENDOR_TAB` with enum `RS2::SolidLine`, in model space and in
@@ -948,7 +1175,10 @@ failing tests so Phase 1 is measured, not argued.
      using the `widgetApplication()` helper of `rs_hatch_tests.cpp`):
      `QG_WidgetPen w; RS_Pen p; p.setLineTypeName("VENDOR_TAB"); w.setPen(p, true, false, "");`
      `REQUIRE(w.getPen().getLineTypeName() == "VENDOR_TAB");` and the same through the
-     `setPen(const RS_Entity*, const RS_Layer*, const QString&)` overload (step 4b).
+     `setPen(const RS_Entity*, const RS_Layer*, const QString&)` overload (step 4b). The assertions
+     stay **name-based at the API level** — the accessor is unchanged — and the round-trip must
+     preserve the **id** as well, which is what proves the widget's guard compares the combo's
+     identity and not its cached enum (§4 step 4b).
    - **T12 dimension-style reference** (fixture (b), DXF only, `[linetype][named][dimstyle]`):
      export with `RS2::FormatDXFRW` writes a `345`
      (`CHECK(!recordGroupValues(out,"DIMSTYLE","345").empty())` — the group is only written for
@@ -965,7 +1195,10 @@ failing tests so Phase 1 is measured, not argued.
      `6/ÖLFARBE` gives **one** table entry and one written record
      (`ltypeRecordGroupValues(out,"Ölfarbe","73").size() == 1`,
      `ltypeRecordGroupValues(out,"ÖLFARBE","73").empty()`), and an R12 export re-imports to one
-     entry (`writeUtf8Caps` leaves non-ASCII bytes alone); an NFD/NFC `find()` case goes beside
+     entry (`writeUtf8Caps` leaves non-ASCII bytes alone) — two interned spellings, **one fold id**,
+     one entry, which holds only because the intern fold is the same ASCII-only `LC_LineType::key()`
+     fold the table uses (§4 step 1); a Unicode fold in either place would make the table and the pen
+     disagree about what one name is; an NFD/NFC `find()` case goes beside
      the layer one in `i18n_caret_nfc_tests.cpp` (`[i18n][nfc][linetypes]`, the `QChar(0x0308)`
      idiom). A `73` without `49` is libdxfrw's pre-existing hard failure
      (`declaredSize != size` → `fileImport` returns false): the marker logic runs only after a
@@ -990,10 +1223,47 @@ failing tests so Phase 1 is measured, not argued.
      `CHECK(firstPoint->getPen(false).getLineTypeName() == "VENDOR_TAB");`
      `CHECK(graphic.findLineType("VENDOR_TAB") != nullptr);` and, after an `RS_FilterDXFRW`
      export, `ltypeRecordGroupValues(out,"VENDOR_TAB","73") == std::vector<std::string>{"0"}`.
+   - **T16 a window switch carries the identity into another document** (`librecad_tests`,
+     `[linetype][named]`, beside T10): the live path is
+     `lc_applicationwindowinitializer.cpp` · `QMdiArea::subWindowActivated` →
+     `qc_applicationwindow.cpp` · `QC_ApplicationWindow::slotWindowActivated` → `slotPenChanged` →
+     `qc_mdiwindow.cpp` · `QC_MDIWindow::slotPenChanged` → `RS_Document::setActivePen`, after which
+     `lc_undosection.cpp` · `LC_UndoSection::setupAndUndoableAdd` stamps `graphic->getActivePen()`
+     onto every entity it adds (`ent->setPen(activePen)`) — all verified in the tree. The case is
+     written where the identity actually moves, in the engine, so it needs no MDI harness:
+     `RS_Graphic a, b;` with a pen carrying `VENDOR_TAB` as `a`'s active pen and
+     `b.setActivePen(a.getActivePen())`, then an undoable add on `b` → the new entity's
+     `getPen(false).getLineTypeName() == "VENDOR_TAB"` with the **same id** (the intern table is
+     process-wide, §4 step 4) while `b.findLineType("VENDOR_TAB") == nullptr` — an identity is
+     **not** table membership (T3 c). Exporting `b` then takes the Q5 marker route:
+     `ltypeRecordGroupValues(out,"VENDOR_TAB","73") == std::vector<std::string>{"0"}` and the
+     entity keeps its name. This is the consequence §2's "Document switch never mutates a document"
+     bullet carries; T11 keeps the `QG_WidgetPen` assertion and is **not** repurposed for it.
+   - **T17 names that no pen and no layer carries** (fixture (b); `[linetype][named]`, the DWG half
+     under `DWGSUPPORT`): three references the entity/layer/dim-style walk of §4 step 6 cannot see.
+     (a) An **MLINESTYLE element** — the element shape the existing *"DXF data-only OBJECTS
+     round-trip their body values via the raw net"* case already writes
+     (`0 MLINESTYLE … 49 0.5 / 62 1 / 6 BYLAYER`), here with `6 VENDOR_MLS` and no LTYPE record →
+     after import the list holds a marker for it, export writes
+     `ltypeRecordGroupValues(out,"VENDOR_MLS","73") == std::vector<std::string>{"0"}`, and the
+     element keeps its group 6 (`rs_filterdxfrw.cpp` · `mlineStyleFromMetadata` copies
+     `MLineStyleElementRecord::linetype` verbatim into the re-emitted record).
+     (b) An **MLEADERSTYLE** whose `leaderLineTypeHandle` resolves through
+     `LC_DwgAdvancedMetadata::lineTypeNameForHandle()` to `VENDOR_MLD`, likewise with no record →
+     the same marker assertion.
+     (c) Under `DWGSUPPORT`, an **MLEADER** whose `LC_MLeaderData::dwgLeaderLineTypeHandle` names
+     `VENDOR_MLD` (built in the test, with the handle→name entry the DWG reader would have
+     archived — `LC_DwgAdvancedMetadata::addLineTypeName()` fills `m_lineTypeNames[handle]`):
+     `REQUIRE(filter.fileExport(graphic, outDwg, RS2::FormatDWG2004))`, which **cannot pass without
+     the marker record**, because `RS_FilterDXFRW::writeMLeader` resolves `MLEADER.LTYPE` and, per
+     leader line, `MLEADER.LINE.LTYPE` through
+     `resolveTableReference(…, m_dwgWriteLTypeHandleByName, …)`, which returns false for a name that
+     map lacks and sets `m_writeFailed`. The contrast is the point of the case: (a) and (b) lose a
+     name silently, (c) loses the file (§4 step 6).
 
    </details>
 
-5. Nothing else. T1–T15 are written against the Phase-1 API and therefore do not compile on their
+5. Nothing else. T1–T17 are written against the Phase-1 API and therefore do not compile on their
    own — and they are never pushed as a standalone commit: `dxf_roundtrip_tests.cpp` is a TU of
    `librecad_tests`, `librecad_fast_tests`, `librecad_dxf_fast_tests` and the generated micro
    target `librecad_dxf_roundtrip_tests` (CMakeLists.txt · `LIBRECAD_FAST_TEST_SOURCES`,
@@ -1079,28 +1349,74 @@ the right names from a file that was only opened and saved.
    mapping as today, **including aliases**) and `lineTypeToName(RS2::LineType)`. The filter's
    two static functions become thin forwarders (keep their signatures — tests and
    `lc_dimstyle.cpp` call them). `rs_filterdxf1.cpp` and `rs_filtershp.cpp` call the new home.
-4. **`RS_Pen`**: `QString m_lineTypeName`. **Invariant**: an empty `m_lineTypeName` means "the
-   canonical name of `m_lineType`". `setLineType(enum)` *clears* the name (stays inline in
-   `rs_pen.h`, no lookup, no new include — the renderers re-set pens per entity), so
+4. **`RS_Pen`**: `std::uint16_t m_lineTypeId = 0` — an interned handle to a **spelling**, not a
+   `QString`, not a pattern and not a table pointer. It occupies the two bytes of padding that
+   already follow `m_lineType`, so `sizeof(RS_Pen)` stays **104** (measured; a `QString` there makes
+   it 128 and costs +2.1 % render, +8.3 % RSS, +8.2 % import plus a reproduced +84 % row — §2 Q2).
+   **The intern-table contract, stated once, here** (`linetypes/lc_linetypeintern.{h,cpp}`, §1):
+   **(i) id 0 is reserved** and means "the canonical name of `m_lineType`"; it never appears in the
+   table and the table never holds an empty spelling. **(ii)** The table maps each id to its
+   **literal spelling** *and* to a **fold id** — the first id ever interned for that folded key,
+   computed with `LC_LineType::key()` of step 1, so the document table and pen equality cannot
+   disagree about what counts as one name. **(iii) Equality compares fold ids**, never characters:
+   two spellings of one name are two ids, one fold id, and compare **equal** (T4), while each pen
+   still reports and writes its **own** spelling (T4, T5). A spelling that folds to the canonical
+   name of its mapped enum shares **fold id 0**, which is what makes
+   `setLineTypeName("continuous")` equal to a plain `SolidLine` pen while `ACAD_ISO09W100` — which
+   does not fold to `PHANTOM` — keeps its own identity and its literal name on export (T5, T7).
+   **(iv) The id is never persisted**: not to DXF group 6/2, DWG, `.lcpp`, `$DIMLTYPE`, `.lcds`,
+   `QSettings` or the plugin API, and it never crosses a file, a document or a process boundary.
+   The table is **process-wide, append-only, and never reused or freed** — which is what makes an id
+   safe on `RS_Clipboard`'s singleton graphic and in clones that outlive their source document, and
+   what disqualifies a document-scoped index or a pointer to a table entry (§2 Q2, §12) — and it
+   maps **no patterns**: the document's `LC_LineTypeList` still maps folded spelling → pattern and
+   stays the truth.
+   **Two limits, stated because they are real.** *Capacity*: **65 535** distinct spellings per
+   process. On exhaustion the intern call returns **id 0** — the pen degrades to its enum's canonical
+   name, exactly as a pen that never carried an identity — and the event is reported once through
+   `RS_DEBUG`; it never throws, never evicts and never reuses an id, because an id already handed
+   out is immortal. To keep that budget out of reach of ordinary use, Phases 3 and 4 intern **only
+   on commit** — when a spelling is accepted into a pen or a record — never per keystroke, per
+   preview or after a validation failure (§6 step 1, §7 step 1). *Threading*: the table is
+   **main-thread-only** and therefore non-atomic. Nothing in `librecad/src` is multi-threaded
+   (verified repo-wide: QtConcurrent, `std::thread`, `QThreadPool`, `QFuture`, `std::async`,
+   `QRunnable`, `std::execution` and omp match only Catch2 and muparser); this plan turns that
+   observation into an **invariant**, and any future worker thread that builds pens must intern on
+   the main thread or guard the table.
+   **Invariant**: `m_lineTypeId == 0` means "the canonical name of `m_lineType`".
+   `setLineType(enum)` *resets the id to 0* (stays inline in `rs_pen.h`, no lookup, no new include —
+   only `rs_pen.cpp` includes the intern unit, and the renderers re-set pens per entity), so
    `RS_Pen(const unsigned int f)` (`RS_Pen(RS2::FlagInvalid)` on 20+ sub-entity sites: text
    letters, hatch loops, polyline arcs), the default ctor and every existing `setLineType()` call
-   site keep today's equality. `getLineTypeName()` (out-of-line in `rs_pen.cpp`) returns
-   `m_lineTypeName` when non-empty, else `LC_LineTypeNames::lineTypeToName(m_lineType)` — never
+   site keep today's equality. That is what makes the invariant affordable at **all 84**
+   `setLineType(` sites (§0.2), not only the six enumerated in this plan.
+   `getLineTypeName()` (out-of-line in `rs_pen.cpp`) returns the intern table's spelling for a
+   non-zero id, else `LC_LineTypeNames::lineTypeToName(m_lineType)` — never
    empty, so step 7 needs no "empty → canonical" fallback and `NoPen`/`LineTypeUnchanged`/
    `LineSelected` keep exporting as `CONTINUOUS`, exactly as today (#1734 unchanged). New
    **one-argument** `setLineTypeName(const QString& name)` — the shape of
-   `LC_DimStyle::DimensionLine::setLineType(const QString&)` — stores the literal name and sets
-   `m_lineType = LC_LineTypeNames::nameToLineType(name)`, aliases included
-   (`ACAD_ISO09W100` → `PhantomLine`); an empty or whitespace-only argument clears the name, and
-   since `nameToLineType("")` is `LineByLayer` an empty group 6 — and a DWG entity whose linetype
+   `LC_DimStyle::DimensionLine::setLineType(const QString&)` — **interns the literal spelling**,
+   stores its id and sets `m_lineType = LC_LineTypeNames::nameToLineType(name)`, aliases included
+   (`ACAD_ISO09W100` → `PhantomLine`). Interning is one hash of the spelling, paid **once per entity
+   at import** (+1.0 % measured on a 200k-entity file) and never per frame; an empty or
+   whitespace-only argument **resets the id to 0**, and since `nameToLineType("")` is
+   `LineByLayer` an empty group 6 — and a DWG entity whose linetype
    handle failed to resolve (`ltFlags == 3` → `lineType == ""`) — lands as the plain ByLayer pen:
-   a pen never carries or reports an empty name, so no empty-named marker can be built. The enum
-   is never settable independently of a name; the only writers of the pair are this setter and
-   `setLineType(enum)`. **`operator==`, `isSameAs()`, `updateBy()`, `setLineTypeFromPen()` carry
-   the name**: compare `m_lineType` first (so `NoPen`/`Unchanged`/`Selected` stay distinct from
-   `SolidLine`), equal enums with both names empty are equal, otherwise compare
-   `getLineTypeName()` with the ASCII fold of step 1. `isLineTypeByLayer/ByBlock()` keep testing
-   the enum. `operator<<` prints the name. Default ctor: `LineByLayer`, name empty →
+   **id 0 is the only "no identity" state**, a pen never carries or reports an empty name, so no
+   empty-named marker can be built. The enum is never settable independently of an identity; the
+   only writers of the pair (enum, id) are this setter and `setLineType(enum)`. **`operator==`,
+   `isSameAs()`, `updateBy()`, `setLineTypeFromPen()` carry
+   the id**: compare `m_lineType` first (so `NoPen`/`Unchanged`/`Selected` stay distinct from
+   `SolidLine`), then the two **fold ids** as one integer compare — no string comparison, no
+   `Qt::CaseInsensitive`, no allocation and no atomic on the render path (measured: `uint16 ==`
+   ≈ 0.23 ns, `QString ==` 2.1–2.8 ns, `QString::compare(Qt::CaseInsensitive)` 39.7 ns). The
+   case-insensitive pen equality this plan always promised is therefore preserved exactly, as an
+   integer compare. **One sizeof probe to run before PR-1**: whether the fold id can be a *second*
+   `std::uint16_t` field in `RS_Pen` or must be an O(1) lookup in the append-only table — only one
+   `uint16` was measured to land in the existing padding, and the study lists the `uint32` padding
+   probe as unmeasured. `isLineTypeByLayer/ByBlock()` keep testing
+   the enum. `operator<<` prints the spelling resolved from the id, with the accepted caveat that a
+   pen inspected in a debugger no longer shows its name. Default ctor: `LineByLayer`, id 0 →
    `getLineTypeName() == "ByLayer"`, the spelling `lineTypeToName()` and `writeLTypes()` already
    use (R12 upper-cases it on write). Engine sites that copy a linetype **by enum** switch to
    `setLineTypeFromPen()` in this PR, so names survive with no UI involvement:
@@ -1116,8 +1432,13 @@ the right names from a file that was only opened and saved.
      `setPen(const RS_Pen&, bool, bool, const QString&)` (the `RS_Entity*` overload builds it
      with `entityResolvedPen.setLineTypeFromPen(entityPen)` instead of
      `setLineType(entityPen.getLineType())`); `getPen()` starts from `m_sourcePen`, applies
-     colour and width from the combos, and calls `setLineType(cbLineType->getLineType())` only
-     when that enum differs from `m_sourcePen.getLineType()`. Without it every accepted dialog
+     colour and width from the combos, and touches the linetype **only when the combo's identity
+     differs from `m_sourcePen`'s** — not when its *enum* does. An enum guard has an identity hole
+     once the pen carries one: picking a different custom name whose cached enum is also `SolidLine`
+     would change nothing, and re-picking the same built-in would silently reset a custom id. So the
+     guard compares identities and applies the result through `setLineTypeName()` for a named row or
+     `setLineType(enum)` for a built-in one; before Phase 3 the combo offers built-in rows only, so
+     the comparison degrades to exactly today's enum test (§6 step 1). Without it every accepted dialog
      rebuilds the pen from the combos and rewrites a custom name: `LC_DlgEntityProperties` (and
      its `onPenChanged`), `LC_DlgDimension`, `LC_DlgTolerance`, `QG_DlgMText`, `QG_DlgText`,
      `QG_LayerDialog::updateLayer` and `LC_LayerDialogEx::getPen` (layer tree) all call
@@ -1132,7 +1453,10 @@ the right names from a file that was only opened and saved.
    `LC_PreviewDocument::getLineTypeList() override { return nullptr; }` in
    `lib/engine/overlays/preview/rs_preview.h` — the **third** `RS_Document` subclass, whose other
    list getters already return `nullptr`; without it Phase 1 does not compile, and every consumer
-   must tolerate a null list. `initForNewDocument()` resets the list to the seed (it runs twice on
+   must tolerate a null list. A pen carrying an id in a document with **no** table still resolves its
+   **name** — the intern table is process-wide, not document-scoped — and falls back to the static
+   enum pattern for drawing (§5 step 2): no consumer may read "no table" as "no identity".
+   `initForNewDocument()` resets the list to the seed (it runs twice on
    the app path — the `QC_MDIWindow` ctor, then `LC_DocumentsStorage::loadGraphic` /
    `loadGraphicFromTemplate` — so the reset is idempotent and leaves `isModified()` false);
    `RS_Clipboard::clear()` does the same; `fileImport()` neither clears nor re-seeds (records
@@ -1145,12 +1469,22 @@ the right names from a file that was only opened and saved.
 6. **Filter import** (`rs_filterdxfrw.cpp`): `addLType()` → also
    `m_graphic->addLineType(LC_LineType::fromDrw(data))` (for a built-in name it only archives the
    raw record, step 2); `setEntityAttributes()` and `attributesToPen()` →
-   `pen.setLineTypeName(rawName)`. At the end of `fileImport()` a shared helper
+   `pen.setLineTypeName(rawName)` — the interning call, and the one line that removes the measured
+   +84 % import-path row: **no per-entity `QString` is retained**. The idiom `setEntityAttributes`
+   already uses for layer and colour names (a fresh `QString` built and kept per entity) must **not**
+   be copied for linetypes; the raw name is hashed, interned and dropped.
+   At the end of `fileImport()` a shared helper
    `RS_Graphic::collectReferencedLineTypeNames()` (case-folded set) walks model space **and every
    block definition** with `LC_ContainerTraverser{…, RS2::ResolveAll}` — dimension and polyline
    children included, because `writeBlocks()` writes the children of every dimension through
    `getEntityAttributes()`, so their names reach the file — plus every layer pen, every dim style
-   (`DIMLTYPE`, `DIMLTEX1`, `DIMLTEX2`) and the `$CELTYPE` header string; a **marker record** is
+   (`DIMLTYPE`, `DIMLTEX1`, `DIMLTEX2`), the `$CELTYPE` header string, every **MLINESTYLE element**
+   linetype (`LC_DwgAdvancedMetadata::mlineStyles()` · `MLineStyleElementRecord::linetype`, or
+   `lineTypeNameForHandle(element.linetypeHandle)` when that string is empty) and every
+   **MLEADER / MLEADERSTYLE leader linetype** (`LC_MLeaderData::dwgLeaderLineTypeHandle` on each
+   `RS2::EntityMLeader`, and `metadata.mleaderStyles()` ·
+   `MLeaderStyleRecord::leaderLineTypeHandle`, both resolved through
+   `LC_DwgAdvancedMetadata::lineTypeNameForHandle()`); a **marker record** is
    created for every referenced name the list does not have (Q5). The walk skips empty and
    whitespace-only names (step 4 canonicalises them to ByLayer) and names that `find()` already
    resolves case-insensitively, `BYLAYER`/`BYBLOCK`/`CONTINUOUS` included — an empty-named record
@@ -1165,8 +1499,25 @@ the right names from a file that was only opened and saved.
    handles `LAYER` records only) keeps the raw group-6 name — names arriving through it have **no
    pattern** and become empty markers, drawn solid from Phase 2. A stated limitation of that
    legacy reader, not a new LTYPE parser (T14, T15).
+   **Why the last three sources are in the walk and not a later phase.** They are the only
+   referenced names that no pen and no layer carries, and one of them does not degrade — it fails
+   the save. On DWG export `rs_filterdxfrw.cpp` · `RS_FilterDXFRW::writeMLeader` resolves
+   `MLEADER.LTYPE` and, per leader line, `MLEADER.LINE.LTYPE` through
+   `resolveTableReference(…, m_dwgWriteLTypeHandleByName, …)`, which **returns false for a name
+   that map lacks** and sets `m_writeFailed`; `m_dwgW->write(…) && !m_writeFailed` then reports a
+   **failed DWG save**, not graceful degradation. That map is filled only by
+   `RS_FilterDXFRW::writeLTypeRecord`, i.e. by the records `writeLTypes()` emits (step 7), so the
+   marker record synthesised there is exactly what makes the save succeed. The other two lose the
+   name silently and must still be fixed: `RS_FilterDXFRW::writeObjects` drops an unresolved
+   `MLEADERSTYLE LTYPE` through `remapTableHandle` and an unresolved AC1032+ MLINESTYLE element
+   handle to `0`, each with a `D_WARNING` — so the name survives in DXF, where the element's
+   group 6 is re-emitted verbatim (`mlineStyleFromMetadata` copies `linetype` into the rewritten
+   record), and is lost in DWG. Cost of the addition: three loops over metadata vectors, no extra
+   entity traversal. Test T17.
 7. **Filter export**: `getEntityAttributes()` / `writeLayers()` write `pen.getLineTypeName()`
-   (never empty, step 4). `writeLTypes()` emits, deduped by `normalizeDwgTableName` across every
+   (never empty, step 4) — **the id is never persisted**, here or anywhere else (step 4); every
+   writer in this plan works in names. `writeLTypes()` emits, deduped by `normalizeDwgTableName`
+   across every
    source: (a) the **35 built-ins unconditionally from `LC_LineTypeNames`** — today's behaviour,
    order, imported-record substitution and `m_builtinLTypeNames` dedupe intact, except that an
    archived record with an **empty path** no longer replaces a built-in's metrics (step 2); the
@@ -1190,6 +1541,23 @@ the right names from a file that was only opened and saved.
    `dxfRW::writeTableEntryAppData` fails the **whole** write below `AC1014` if the record has app
    data, reactors or an xDict, so R12 exports get the table's dash-only record instead. DWG path
    unchanged (`writeLTypeRecord`).
+   **One repair on that verbatim path** (`dxfRW::writeLineType`, group `340`): a complex record's
+   segment carries the **source** file's STYLE handle, and `libdxfrw.cpp` · `dxfRW::writeTables`
+   emits `iface->writeLTypes()` **before** `iface->writeTextstyles()`, so master re-emits a `340`
+   pointing at a handle the written STYLE table never mints. Harmless today — the entity loses the
+   name, the record is an orphan — and **not** harmless from this PR on, when those records become
+   entity-referenced. `RS_FilterDXFRW::writeLTypeRecord` therefore remaps each segment's
+   `styleHandle.ref` before handing the record to the writer: source handle → name through
+   `LC_DwgAdvancedMetadata::textStyleNameForHandle()`, name → output handle through
+   `dxfRW::getTextStyleHandle()`, which reads `textStyleMap` and so needs the STYLE handles minted
+   **before** the LTYPE table is written — a style-handle pre-pass, the shape
+   `m_dwgWriteLTypeHandleByName` already has for LTYPE on the DWG side. If that pre-pass is refused
+   upstream, the fallback is to write the record **dash-only**: clear `shapeFlags` so
+   `writeLineType` emits no `74`/`75`/`340`/`46`/`50`/`44`/`45`, which is exactly what R12 export
+   already produces (those groups are gated on `version > AC1009`). Either way the invariant is the
+   one T8 asserts — **no `340` that no STYLE record in the same file answers**. The DWG writer
+   shows the same shape on its per-dash handles; that path is not touched here (DWG handle gaps are
+   §8's subject).
 8. Register the new files in `CMakeLists.txt` and `src.pro`; new test file
    `linetypes/tests/lc_linetypelist_tests.cpp` into `librecad_tests` — this commit is also where
    the Phase-0 T7 file enters that list, together with any new `librecad_tests` TU introduced by
@@ -1198,7 +1566,7 @@ the right names from a file that was only opened and saved.
    `[linetype]` test green.
 
 **Known and accepted in this phase** (stated in the PR): choosing a different built-in in a
-linetype combo replaces a custom name with that built-in — by design, until Phase 3 lists custom
+linetype combo resets the pen's identity to that built-in — by design, until Phase 3 lists custom
 names. Accepting a dialog **without touching** the linetype combo (geometry edits, layer renames,
 colour and width changes) keeps the name (step 4b), and Pen Copy, Modify→Attributes and block
 expansion keep it from Phase 1 (step 4). The pen toolbar, the pen palette and the plugin API still
@@ -1256,9 +1624,13 @@ screen, in print preview and in every export that goes through `RS_Painter`.
    values) and the pattern (empty → solid). **Never dereference a null `getPattern()`**
    (`librecad/src/lib/gui/rs_linetypepattern.cpp` · `getPattern` returns `nullptr` for every key
    missing from its map — `RS2::LineTypeUnchanged` = 26 is one): fall back to solid; the
-   empty-pattern → solid fallback already exists in `setPen`.
-   `RS_Painter::setPen(const RS_Pen&)` **keeps its signature and resolves the pattern itself**,
-   through the plug it already has for `getBackgroundColor()`:
+   empty-pattern → solid fallback already exists in `setPen`. **PR-0a installed that guard
+   pre-ladder** (§10), so this step inherits it rather than adding it; what PR-2 owes is keeping it
+   true as the pattern source moves from the static enum table to the document table, which T-R4
+   re-pins through the renderer rig.
+   `RS_Painter::setPen(const RS_Pen&)` **keeps its signature and resolves the pattern itself** — by
+   the pen's interned **identity**, not by a string — through the plug it already has for
+   `getBackgroundColor()`:
    ```cpp
    const std::vector<double>* pattern = (m_renderer != nullptr) ? m_renderer->resolveDashPattern(pen) : nullptr;
    if (pattern == nullptr) {
@@ -1269,7 +1641,10 @@ screen, in print preview and in every export that goes through `RS_Painter`.
    null or empty → `Qt::SolidLine`, otherwise `rsToQDashPattern(*pattern, k, newDashOffset)`.
    `setPen` also records whether the `QPen` it actually built is dashed (`m_lpenDashed`, beside
    `m_lpen`) for the offset guard of step 2. No pattern field and no table pointer on `RS_Pen`,
-   and no second `setPen` overload.
+   and no second `setPen` overload: the pen carries a handle to a **spelling**, never to a pattern or
+   to a table row. That is exactly what disqualifies the pointer-to-entry variant of the identity,
+   which dangles where `RS_Clipboard` and `LC_ActionBlockLibraryInsert::reset()` outlive their source
+   graphic (§2 Q2, §12).
    Because resolution lives **inside** `setPen`, `getPen()`/`setPen()` round-trips keep the
    pattern — `lc_wipeout.cpp` · `LC_Wipeout::draw` saves `painter->getPen()`, fills, restores it
    and only then strokes its frame; `LC_GraphicViewRenderer::doDrawLayerBackground` does the same
@@ -1284,24 +1659,40 @@ screen, in print preview and in every export that goes through `RS_Painter`.
    (new virtual, same null-guard shape as `getBackgroundColor()`, over the `RS_Graphic* m_graphic`
    the base already holds together with `updateGraphicRelatedSettings(RS_Graphic*)`); the six
    `setPenFor*` sites are **unchanged except for the dash-offset guard** below.
-   **Resolution order**, one function: (a) enum `NoPen`/`SolidLine`/`LineByLayer`/`LineByBlock` →
-   no pattern (solid or nothing), as today; (b) name found **and** the entry is a seeded built-in
+   **Resolution order**, one function, **identity first**. The order is load-bearing and an earlier
+   draft of this plan had it inverted: with the enum tested first, rule (a) short-circuits rule (c)
+   and **no custom pattern ever draws**, because `rs_filterdxfrw.cpp` · `nameToLineType` ends in
+   `return RS2::SolidLine;` for every vendor name and this plan's own T1 pins that cache value. The
+   corrected order is also the cheapest available, because a pen with no identity leaves on one
+   integer compare:
+   **(a) `pen.getLineTypeId() != 0`?** If not — every built-in pen, every UI-only pen, every glyph
+   and sub-entity pen — fall straight through to (d): no lookup, no hash, no string, one `uint16`
+   test. **(b)** id non-zero → resolve its **fold id** to a table entry (cache below); entry found
+   **and** the entry is a seeded built-in
    (`builtin == true`) → `RS_LineTypePattern::getPattern(entry->legacyType)` — the static screen
    table stays the only on-screen source for the 35 built-in names, and the entry's 49-values are
    used only for export. That keeps `DASHED`/`DIVIDE`/`DASHDOT`/`BORDER`/`HIDDEN` at today's run
    lengths (the seeded DXF metrics differ: `DIVIDE` screen `{12,-4.9,0.2,-4.9,0.2,-4.9}` vs DXF
-   `{12.7,-6.35,0,-6.35,0,-6.35}`), puts the UI-only pens that `setLineType(enum)` labels with a
-   canonical name on the static table without a second mechanism, and makes a file that redefines
+   `{12.7,-6.35,0,-6.35,0,-6.35}`) and makes a file that redefines
    a built-in name (the neutral fixture carries `HIDDEN [64,-32]`; T-R7 adds `DOT2 [2,-32]`) change the
-   exported record only, never the screen — today's behaviour, so §12 stays true; (c) name found,
-   custom → the entry's canonical pattern (step 3); (d) miss → static pattern of the cached enum;
-   (e) nothing → solid.
+   exported record only, never the screen — today's behaviour, so §12 stays true. **(c)** entry found
+   and custom → the entry's canonical pattern (step 3). **(d)** id 0, or a fold id the table does not
+   resolve → the **enum** decides, exactly as today: `NoPen`/`SolidLine`/`LineByLayer`/`LineByBlock`
+   → no pattern (solid or nothing), any other value → its static pattern. This is also where the
+   UI-only pens that `setLineType(enum)` labels with a canonical name land, on the static table and
+   without a second mechanism (step 4). **(e)** nothing → solid.
    **No listener below the UI layer.** `LC_LineTypeList` keeps a monotonically increasing
    `unsigned revision()` bumped by every mutator (add/edit/remove/rename/clear/seedBuiltins); the
-   renderer keeps `m_patternCache` (`QHash<QString, std::vector<double>>` keyed by
-   `LC_LineType::key()`) plus `m_patternCacheRevision` and `m_patternCacheGraphic`, and drops it at
+   renderer keeps `m_patternCache` keyed on the pen's **fold id** (a dense vector indexed by fold
+   id, or `QHash<std::uint16_t, std::vector<double>>`) plus `m_patternCacheRevision` and
+   `m_patternCacheGraphic`, and drops it at
    the start of `render()`/`setupPainter()` when `m_graphic` is null, differs from
-   `m_patternCacheGraphic`, or the list revision moved. A renderer has no lifecycle hook,
+   `m_patternCacheGraphic`, or the list revision moved. Keying on the id rather than on
+   `LC_LineType::key()` removes both the per-entity `QHash<QString, …>` probe (measured 9.5–15.1 ns)
+   and the `key()` string construction behind it. The **intern** table needs no revision counter of
+   its own: it is append-only and never freed, so an id can never dangle; what can change is the
+   table **row** a fold id resolves to, which is precisely what the list's revision already covers.
+   A renderer has no lifecycle hook,
    `QC_MDIWindow::~QC_MDIWindow` deletes the document **before** its child view and renderer (the
    #2764 class of bug), print-preview and block-edit windows share the parent graphic, and five
    renderers are stack objects (`LC_Printing`, `pdf_print_loop.cpp`,
@@ -1313,9 +1704,18 @@ screen, in print preview and in every export that goes through `RS_Painter`.
    `if (pen.getLineType() != RS2::SolidLine) pen.setDashOffset(patternOffset * m_defaultWidthFactor);`
    lines in `LC_GraphicViewRenderer::setPenForEntity`/`setPenForDraftEntity`,
    `LC_PrintPreviewViewRenderer::setPenForPrintingEntity` and
-   `LC_PrintViewportRenderer::setPenForPrintingEntity` become unconditional (`setPen` reads
-   `dashOffset()` only in its dashed branch, and `m_lastPaintEntityPen.updateBy(originalPen)`
-   copies the pen **before** the offset is set, so the `isSameAs()` cache is unaffected);
+   `LC_PrintViewportRenderer::setPenForPrintingEntity` become unconditional: `setPen` reads
+   `dashOffset()` only in its dashed branch, and `m_lastPaintEntityPen.updateBy(originalPen)` copies
+   the pen **before** the offset is set. An earlier draft of this plan stopped there and concluded
+   that "the `isSameAs()` cache is unaffected" — true, and misleading, so it is stated properly here:
+   pre-ladder that cache is **already dead for every dashed pen**, because `isSameAs` compares the
+   running offset itself (measured: 300 dashed lines → 300 `RS_Painter::setPen` calls, against **1**
+   for 300 solid ones; one dashed entity costs the cache for the rest of the frame). What makes
+   these gates safe is therefore **PR-0b** (§10), which takes the offset out of the key for pens that
+   draw no pattern — and PR-2 owes PR-0b the forward obligation in return: from here the predicate
+   must follow the **resolved pattern**, never the cached enum, which is exactly what `m_lpenDashed`
+   (step 1) records. This feature moves far more entities onto that permanently-uncached path, which
+   is why the fix is pre-ladder and not a later phase.
    `RS_Painter::updateDashOffset` returns early on `!m_lpenDashed` instead of
    `m_lpen.getLineType() == RS2::SolidLine`. The sixth enum gate, `LC_MakerCamSVG::writeLine`, is
    handled in step 5.
@@ -1328,27 +1728,124 @@ screen, in print preview and in every export that goes through `RS_Painter`.
    (`dashPattern.resize(size - size % 2)` silently drops the trailing dash of an odd `.lin`
    pattern such as `A,.5,-.25,.5`). The sign of an element is carried by its **position**, not by
    its value (`rsToQDashPattern` takes `std::abs(d)`), so the canonicaliser must produce the
-   dash/gap alternation itself. **(ii) screen quantisation** — in `RS_Painter` only: the
+   dash/gap alternation itself. Canonicalisation is **mandatory**: every pattern that reaches the
+   painter has been through it, so the painter never sees an odd list, a leading gap or a
+   zero-length period. It stays **unit-free and uncapped** — the 32-element fold of (ii) is not
+   part of it (boundary note below).
+   **(ii) screen quantisation** — in `RS_Painter` only: the
    `k = dpmm / max(screenWidth, 1)` scaling, `0` (a dot) and any element shorter than one QPen
    dash unit → one dash unit (today's `std::max(k·|d|, 1.)` clamp, i.e. one pen width — what keeps
-   RoundCap dots visible), and **fall back to solid when the on-screen period drops below a few
-   pixels** (QDashStroker cost; AutoCAD does the same).
+   RoundCap dots visible), and then two guards **derived from Qt's own limits**:
+   - **Fold to at most 32 elements.** Qt honours only the **first 32** dash elements on the stroker
+     path and **all** of them when the pen is cosmetic (pixel test: a 40-element pattern is
+     pixel-identical to its first 32 at width 2.0 and differs at width 0), so an uncapped pattern
+     would render **differently depending on lineweight**, with no warning. Absorb the shortest
+     dash/gap pairs into their neighbours until 32 remain, keeping the total period exact; never
+     truncate — truncation shortens the period, which is today's `resize(size - size % 2)` defect
+     one level down. Element count is also where the time goes: ~0.003 µs/line per element while
+     the pen is cosmetic, ~0.08 µs/line per element on the stroker path (width > 1) — 25×, which
+     makes the fold a performance requirement as well as a correctness one.
+   - **Fall back to solid below the minimum period**:
+     `period_px ≥ max(3 px, longest_stroked_subpath_px / 10000)`. The divisor is not a guess:
+     `QDashStroker::repetitionLimit()` returns the hard constant `10000`
+     (`QtGui/private/qstroker_p.h`, Qt 6.8.2 in the pixi env), and past it Qt draws the subpath
+     **solid** — bisected at exactly 10000.0 periods at pen widths 1.5, 2.0 and 3.0, with the lit
+     pixels jumping to a full stroke and the time collapsing from 875.9 µs to 0.9 µs. It is a
+     **correctness** cliff, not a cost one, and it is out of reach today only because the built-in
+     periods are 86–174 px; a 6 px period — what the clamp above produces on a zoomed-out custom
+     pattern — reaches it at 60 000 px of line. `longest_stroked_subpath_px` is the device length
+     of the longest subpath the painter hands Qt with that pen: the clip-rect diagonal where the
+     primitive is clipped, the entity's own device length where it is not.
+   **Boundary, and it is load-bearing**: the fold and the fallback are **render-side only**.
+   Neither may move into (i), which is the form export shares — T13 (§3) pins that edge patterns
+   are written verbatim, group `49` values included, so a pattern folded in the engine would change
+   the written record and fail it.
+
+   **The running dash offset must use the same units as the pattern, and today it does not.**
+   Pattern elements are device millimetres (`k = dpmm / max(screenWidth, 1)`, §0.3), but
+   `rs_painter.cpp` · `RS_Painter::updateDashOffset` decrements the running offset by
+   `e->getLength() * m_defaultWidthFactor` — a WCS length in **drawing units**, multiplied by
+   `$DIMSCALE` (`lc_graphicviewportrenderer.cpp` · `updateUnitAndDefaultWidthFactors` ·
+   `m_defaultWidthFactor = g->getVariableDouble("$DIMSCALE", 1.0)`) — while the four renderer gates
+   of step 2 multiply the accumulated offset by `m_defaultWidthFactor` **again** and
+   `rsToQDashPattern` finally scales it by the same `k` as the pattern, i.e. reads it as device
+   millimetres. `$DIMSCALE` is therefore applied twice and the zoom factor not at all, so the phase
+   advance matches the entity's drawn length only where **px per drawing unit == dpmm**: measured in
+   rendered pixels, continuity holds near **3.78 px/unit**, and at 400/800/1200/1600 px the second
+   of two collinear lines restarts with a ~15 px stub. PR-2 fixes the units rather than dropping the
+   promise: `updateDashOffset` accumulates the entity's **device** length in millimetres
+   (`toGuiDX(e->getLength()) / dpmm`, dropping its own `m_defaultWidthFactor`), which makes the
+   phase advance exactly the entity's device length in pixels at any zoom and any `dpmm`.
+   `$DIMSCALE` then enters the dash chain exactly once, at step 2's four gates, where it scales the
+   offset but not the pattern; PR-2 pins continuity at `$DIMSCALE == 1` (T-R5) and hands the
+   question of one factor scaling pattern **and** phase together to §9. If maintainers refuse the
+   unit change, the promise goes with it **in the same commit**: T-R5's continuity expectation and
+   the second manual line of the Validation block below are deleted, not left expecting behaviour
+   the code does not have.
+
+   **Phase across entity boundaries and inside a polyline**, stated because only half of it is
+   bought here. `updateDashOffset` is called by `rs_line.cpp` · `RS_Line::draw`,
+   `lc_splinepoints.cpp` · `LC_SplinePoints::draw` and the two large-radius branches of
+   `rs_painter.cpp` · `drawArcEntity`; circles, ellipses, small arcs, hatches and polylines never
+   advance it, so the phase restarts at those. Inside **one** polyline the behaviour is two
+   different ones: `rs_painter.cpp` · `drawEntityPolyline` emits `path.moveTo()` per straight child
+   — a new subpath, so Qt restarts the dash phase at every vertex — while arc children are appended
+   to the same subpath by `drawArcEntity`, where Qt carries it. PR-2 takes the free half: emit
+   `lineTo` when the child starts where the path currently ends (the contiguous case, i.e. every
+   well-formed polyline), keeping one subpath, and keep `moveTo` for a genuine gap. That makes a
+   polyline behave one way instead of two; it does **not** make the phase continue from the
+   polyline into the next entity, because the container still never calls `updateDashOffset` — a
+   non-goal, kept in §12.
 4. UI-only pens (selection `DashLineTiny`, the `RS2::DotLine2` snap guides of
    `LC_GraphicViewRenderer::setupRefSnapEntityPen`, `PATTERN_SELECTED`,
    `PATTERN_BLOCK_LINE`) keep the static table, and need no separate mechanism: they are set
-   through `RS_Pen::setLineType(enum)`, carry the canonical built-in name (§4 step 4) and
-   therefore resolve through rule (b) or (d) of step 2.
+   through `RS_Pen::setLineType(enum)`, which resets the identity to **id 0**, so they report the
+   canonical built-in name (§4 step 4) and resolve through rule **(d)** of step 2 — the static table,
+   reached on the cheapest path there is.
 5. `LC_MakerCamSVG::writeLine`: the baking trigger becomes `m_convertLineTypes && hasPattern`
    instead of `m_convertLineTypes && RS2::SolidLine != pen.getLineType()` (a vendor pattern caches
    as `SolidLine`, so today it would leave the SVG as a plain `<line>`), the pattern being looked
-   up in the graphic's table by the pen's name; the pen stays `line->getPen()`, as today. A
+   up in the graphic's table by the pen's **fold id** (the name is kept for the renderer-less path,
+   which has no id to resolve against); the pen stays `line->getPen()`, as today. A
    **custom** entry's 49-values are drawing units and are converted like coordinates
    (`m_lengthFactor`) — no device-mm conversion and no pixel clamp, since the quantised pattern of
    step 3(ii) is meaningless in an SVG. A built-in entry or a miss keeps today's
-   `svgPathAnyLineType`/`getLinePattern` path (family factor × `m_defaultDashLinePatternLength`),
-   output byte-identical to master. Scope stays `RS_Line`, as today (`writePolyline`/`writeArc`/
+   `svgPathAnyLineType`/`getLinePattern` path (family factor × `m_defaultDashLinePatternLength`)
+   with **one fix**: that path steps along the line in the same space as the coordinates
+   (`lineLengh`, `lineStep` and `step` are drawing units, emitted through
+   `svgPathMoveTo`/`svgPathLineTo` → `lengthXml()` → `× m_lengthFactor`), while
+   `m_defaultDashLinePatternLength` is the **millimetre** value from the export dialog. So for every
+   unit that falls into `write()`'s default branch (metre, foot, …, where
+   `m_lengthFactor = RS_Units::convert(1., unit, Millimeter)`) the emitted dash period is
+   `m_lengthFactor` times too long, and for the `cm`/`in` branches — which keep
+   `m_lengthFactor == 1` and relabel the document unit — a millimetre setting is emitted as
+   centimetres or inches. Express the setting in the space the stepping uses: divide by
+   `m_lengthFactor`, and convert for the `cm`/`in` branches, so the period is the requested
+   millimetre length in every unit. The custom branch does not have the bug, because a table
+   entry's 49-values are drawing units already. Output stays byte-identical to master for a
+   millimetre drawing (`m_lengthFactor == 1`, what T-R8 pins); for the other units it changes,
+   which is the point. Scope stays `RS_Line`, as today (`writePolyline`/`writeArc`/
    `writeCircle` ignore linetypes, and the pre-existing "ByLayer falls into the default branch"
    quirk is out of scope unless fixed in the same line).
+   **The rest of the export inventory Phase 2 inherits** — nothing here is changed by this PR;
+   custom patterns simply follow the `dpmm` chain the built-ins already follow
+   (`RS_Painter::getDpmm` = `device()->width() / int(device()->widthMM())`, frozen into
+   `m_cachedDpmm` by the ctor), and each entry is a place a reviewer will ask about:
+   - `lc_imageexporter.cpp` · `LC_ImageExporter::exportGraphicToImage` and `console_dxf2png.cpp` ·
+     `slotFileExport` paint into a **`QPixmap`**, whose `widthMM()` comes from the screen's physical
+     DPI — so every dash length in a PNG/JPG export follows **the user's monitor**, not the export
+     size.
+   - `LC_ImageExporter::prepareSVGGenerator` and the console's `QSvgGenerator` set
+     `setSize`/`setViewBox`/`setFileName` and **never `setResolution`**, so Qt's default 72 dpi
+     applies: a 1000-px export becomes a 352.8 mm sheet and `dpmm` freezes at ≈ 2.835 whatever the
+     drawing says. Custom patterns land on that fictitious sheet.
+   - `qg_librarywidget.cpp` · `QG_LibraryWidget::getPathToPixmap` renders each library item into a
+     128×128 `QPixmap` through `LC_PrintViewportRenderer` — the same screen-DPI dependency, on an
+     interactive path.
+   - `LC_Printing` / `pdf_print_loop.cpp` use the real device resolution and are the only paths
+     where "device millimetres" means millimetres.
+   All four are **pre-existing** and PR-2 fixes none of them; they are recorded because "consistent
+   on paper" is a promise §9 would have to keep against all four, not only the printer.
 6. Tests — new `librecad/src/lib/gui/render/tests/lc_linetype_render_tests.cpp` in
    `librecad_tests` (CMake only), tag `[linetype][render]`, `QT_QPA_PLATFORM=offscreen`. Render
    tests run through a **headless renderer rig**, not `TestPainter` alone: `TestPainter` is a
@@ -1358,22 +1855,28 @@ screen, in print preview and in every export that goes through `RS_Painter`.
    `LC_ImageExporter::renderGraphic`'s order (painter, viewport, renderer, `loadSettings()`,
    `render()`) and pins the image resolution itself, which that exporter does not: a `QImage` with
    `setDotsPerMeterX/Y(1000)` **before** the `RS_Painter` is constructed (`RS_Painter::getDpmm` =
-   `device()->width() / device()->widthMM()`, frozen into `m_cachedDpmm` by the ctor, ≈ 2.84 px/mm
-   at QImage's default 2835 dots/m) → 1 px/mm; `LC_GraphicViewport viewport; viewport.setDocument(&graphic);`
+   `device()->width() / device()->widthMM()`, frozen into `m_cachedDpmm` by the ctor,
+   ≈ 3.77 px/mm at QImage's default 96 dpi — 3780 dots/m, which `widthMM()` rounds to 265 mm for a
+   1000-px image, giving 3.7736 px/mm, **not** the ≈ 2.84 px/mm of a 72-dpi device) → 1 px/mm;
+   `LC_GraphicViewport viewport; viewport.setDocument(&graphic);`
    **before** `LC_PrintViewportRenderer r(&viewport, &painter);` (the base ctor captures
    `m_graphic` from the viewport), then `r.loadSettings(); r.render();`. Expected run lengths are
    derived from `painter.getDpmmCached()`, never from a hard-coded dpi.
    - **(T-R1)** zoom independence: a `VENDOR_TAB` `[20,-20]` line rendered at viewport factors 1.0
      and 4.0 has identical on/off run lengths of `round(20 · dpmm)` px.
    - **(T-R2)** pen-cache guard: two circles (circles do not advance the dash offset, so
-     consecutive lines could miss the cache on the offset alone) with names `VENDOR_TAB`
+     consecutive lines could miss the cache on the offset alone) with identities `VENDOR_TAB`
      `{20,-20}` and `VENDOR_UTL` `{20,-20,2,-20}`, same colour, width and cached enum, drawn back
-     to back → different run lengths; plus a direct `RS_Pen::isSameAs` unit case with two names
-     and equal offsets.
-   - **(T-R3)** a pattern whose on-screen period is below the threshold renders as one unbroken
-     run.
-   - **(T-R4)** null-pattern hardening on the settings-bound path (`LC_GridSystem::drawGrid`/
-     `drawMetaGrid` and `RS_OverlayBox::draw`, which build a pen from
+     to back → different run lengths; plus a direct `RS_Pen::isSameAs` unit case with two **ids**
+     and equal offsets — the exact regression the #1922 pen cache would otherwise hide.
+   - **(T-R3)** both minimum-period branches of step 3(ii): a pattern whose period is below the
+     3 px floor renders as one unbroken run, and so does a 6 px period on a 60 000 px subpath (the
+     `repetitionLimit()` branch). Assert `painter.pen().style() == Qt::SolidLine` — the `QPen` the
+     painter actually built — beside the lit-pixel run, so the case proves **our** guard took the
+     decision instead of Qt silently drawing solid for us.
+   - **(T-R4)** null-pattern hardening on the settings-bound path — **PR-0a's guard** (§10),
+     re-pinned here through the rig now that the pattern source is the document table
+     (`LC_GridSystem::drawGrid`/`drawMetaGrid` and `RS_OverlayBox::draw`, which build a pen from
      `static_cast<RS2::LineType>(LC_GET_INT(...))` and reach `RS_Painter::setPen` directly,
      bypassing the six `setPenFor*` sites):
      `RS_Pen stale(RS_Color(0,0,0), RS2::Width00, static_cast<RS2::LineType>(99));`
@@ -1383,11 +1886,21 @@ screen, in print preview and in every export that goes through `RS_Painter`.
      the rig. Update the comment above the existing `getPattern() != nullptr` loop in
      `dxf_roundtrip_tests.cpp`: the painter no longer dereferences unchecked, and the loop stays
      as a table-completeness check.
-   - **(T-R5)** continuity: two consecutive collinear `VENDOR_TAB` lines continue the `[20,-20]`
-     sequence across the joint with the same run-length vector as two `DASHED` lines do, and a
-     solid line between them leaves the offset untouched; repeated through
-     `LC_PrintPreviewViewRenderer` if a widget-free construction exists, else noted as the same
-     code path.
+   - **(T-R5)** continuity, **after the unit fix of step 3**: two consecutive collinear
+     `VENDOR_TAB` lines continue the `[20,-20]` sequence across the joint with the same run-length
+     vector as two `DASHED` lines do, and a solid line between them leaves the offset untouched —
+     asserted at **two different `dpmm` values** (the rig's 1 px/mm and a second image at 4 px/mm)
+     and at two viewport factors, because master happens to be continuous near 3.78 px/unit and a
+     single-resolution case would pass by accident. `$DIMSCALE` stays 1 in this fixture (step 3).
+     The preview path is covered only if `LC_PrintPreviewViewRenderer` can be built without a
+     widget, and it is **not** the same code path as printing:
+     `lc_printpreviewviewrenderer.cpp` · `setupPainter` zeroes every rendering minimum and forces
+     fixed **5°** arc interpolation (`setRenderArcsInterpolate(true)`,
+     `setRenderArcsInterpolationAngleFixed(true)`, `M_PI/36`), while
+     `lc_printviewportrenderer.cpp` · `setupPainter` only sets the drawing mode and disables UCS —
+     so arcs there are chains of 5° chords and the `drawArcEntity` branches that advance the offset
+     never run. If it cannot be built, the case is recorded as **untested on the preview path**,
+     never as "the same code path".
    - **(T-R6)** `getPen()`/`setPen()` round-trip: a custom-named line, an `LC_Wipeout`, then a
      second line with the same pen → the third entity keeps the custom run lengths.
    - **(T-R7)** built-ins unchanged: with a fixture that redefines `HIDDEN [64,-32]` and
@@ -1396,7 +1909,10 @@ screen, in print preview and in every export that goes through `RS_Painter`.
      the exported record still carries the file's 49-values.
    - **(T-R8)** MakerCam, with a capturing `LC_XMLWriterInterface` stub: a 100-unit `VENDOR_TAB`
      line with entry `[20,-20]` emits a path with three dash segments (0–20, 40–60, 80–100); a
-     `DASHED` line's `d` attribute is byte-identical to master.
+     `DASHED` line's `d` attribute is byte-identical to master **for a
+     millimetre drawing**, and a second fixture in a unit whose `m_lengthFactor != 1` (metres) pins
+     the period fix of step 5 — the emitted `DASHED` period is the dialog's millimetre setting,
+     where master emits it `m_lengthFactor` times too long.
    - canonicalisation unit tests (step 3(i), no painter): `[20,-20,10]` → `[30,-20]` (truncation
      would give `[20,-20]` and shorten the period), `A,.5,-.25,.5` → `[1.0,-0.25]`, `VENDOR_NEG`
      `[-20,-20]` and `VENDOR_ZERO` `[0,0]` produce a drawable pattern or solid, never an empty
@@ -1410,13 +1926,26 @@ entity dialog (`LC_DlgDimension::onPenChanged` → `updateDimStylePreview`) draw
 nearest built-in until Phase 5 copies the table into them (§8 step 1). Redefining a built-in name
 in a file changes the exported record only, never the on-screen pattern.
 
+**Priced, because it is not free**: every import pays one `seedBuiltins()` of 35 records and one
+`RS_Graphic::collectReferencedLineTypeNames()` walk (§4 step 6, which runs at the end of
+`fileImport()`), and imports are not rare. **64** shipped hatch patterns
+(`librecad/support/patterns/*.dxf`, counted) each go through `rs_pattern.cpp` ·
+`RS_Pattern::loadPattern` → a throwaway `RS_Graphic` + `RS_FileIO::fileImport`, the first time a
+hatch of that name is drawn; **1272** shipped library DXFs (`librecad/support/library`, counted)
+each go through `qg_librarywidget.cpp` · `QG_LibraryWidget::getPathToPixmap` →
+`LC_DocumentsStorage::loadDocument`, whenever the cached thumbnail is missing or older than the DXF.
+Both are interactive paths (hatch preview; browsing the library dock). Two requirements follow: the
+walk stays O(entities) with no per-entity allocation, and neither the walk nor the seeding may move
+onto the icon-cache **hit** path, which today returns the PNG before any document is built.
+
 ### Validation
 ```bash
 cmake --build build --target librecad_tests    # new lc_linetype_render_tests.cpp TU
 QT_QPA_PLATFORM=offscreen build/librecad_tests "[linetype][render]" -s
 QT_QPA_PLATFORM=offscreen build/librecad_dxf_roundtrip_tests "[linetype]"
 # manual: open the neutral fixture, zoom in/out — vendor patterns keep their mm size like DASHED does
-# manual: two collinear vendor lines — the dashes continue across the joint, as DASHED does
+# manual: two collinear vendor lines, at two zoom levels — the dashes continue across the joint,
+#         as DASHED does, at both (unit fix of step 3; master continues only near 3.78 px/unit)
 ```
 
 ### Commit
@@ -1434,12 +1963,26 @@ never destroys a name it does not know.
 ### Steps
 1. `QG_LineTypeBox::init(LC_LineTypeList*, showByLayer, showUnchanged, showNoPen)` fills from
    the list (special rows, built-ins, custom); `itemData` = a small `QVariant`-registered value
-   `{QString name; RS2::LineType legacy;}` with `operator==` by case-insensitive name;
+   `{QString name; RS2::LineType legacy;}` whose `operator==` compares the **folded key or the
+   interned id**, never `Qt::CaseInsensitive` (§11). The widget layer may keep the `QString` — it is
+   not the render loop, and `findData` over 338 rows with that custom type measures 7.25 µs — but the
+   comparison rule is the same everywhere (§4 step 4).
    `setLineType(name)`; **never leave −1** (today `findData(t)` misses → index −1 →
    `itemData(-1).toInt() == 0` → `NoPen` is emitted): a temporary row "(not defined in this
-   drawing)" like `QG_ColorBox::addTemporaryCustomColor`. The static
-   `init(showByLayer, showUnchanged, showNoPen)` stays for the 6 settings combos. A name-based
-   signal is added beside the enum one.
+   drawing)" like `QG_ColorBox::addTemporaryCustomColor`. Selecting a row sets the pen's identity
+   through `setLineTypeName()`; the temporary row itself **must not intern its spelling** until the
+   value is committed to a pen — the intern table is append-only and capped at 65 535 spellings
+   (§4 step 4), so no keystroke, preview or rejected edit may mint an id. The static
+   `init(showByLayer, showUnchanged, showNoPen)` stays for the settings combos — **12 declarations
+   in two `.ui` files, of which 6 are live**, which is the count an earlier draft's bare "6 settings
+   combos" left unreconciled: `lc_dlg_options_graphic_view.ui` and `qg_dlgoptionsgeneral.ui` each
+   declare the same six (`wGridLinesLineType`, `wMetaGridLinesLineType`,
+   `wMetaGridPointsLineType`, `wOverlaySelectionLineType`, `wOverlaySelectionInvertedLineType`,
+   `wSnapLinesLineType`), verified in the tree, but the first is an orphan that no source includes
+   and neither build compiles (§0.4). So the enum-only mode serves **six** compiled combos today and
+   a seventh dialog's worth the day that orphan is wired up; grepping the `.ui` files for the number
+   must not be read as six, and the overload stays either way. A name-based signal is added beside
+   the enum one.
    - **Row text**: a built-in row keeps the translated label it has today, looked up by
      `legacyType` — the combo keeps its own `tr("Dash (small)")` strings, and the property-sheet
      cell (`LC_PropertyLineTypeComboboxView::doDrawValueDetails`),
@@ -1450,6 +1993,40 @@ never destroys a name it does not know.
      `lupdate` is not run in this PR (precedent: #2815/#2823 added `tr()` strings and left
      `librecad/ts` to the maintainers' regeneration commits), which is what keeps the §1.1
      "TRANSLATIONS untouched" line true.
+   - **Translation owner, named**: PR-3 adds no message to `librecad/ts` (built-in labels keep the
+     `tr()` strings they already have, custom names are verbatim), so the 66 `.ts` files stay
+     untouched here. Any string PR-3 or PR-4 *does* add reaches users only through a maintainer-run
+     `lupdate`/`lrelease` regeneration — 66 files (counted in `librecad/ts`), ~10.9k messages each
+     (`librecad_es.ts`: 10 923 `<message>` elements, counted), each with per-message line numbers,
+     i.e. a multi-megabyte commit no feature PR should carry. The PR asks for that regeneration
+     explicitly and states the consequence: **PR-4's dialog ships untranslated in all 66 locales**
+     until a maintainer runs it — on the #2815/#2823 precedent cited above.
+   - **Temporary row, and its removal**: the row is **name-bearing** — it reads
+     `VENDOR_TAB — (not defined in this drawing)`, because a row of pure boilerplate would not
+     tell the user *which* unknown name is selected. That is exactly why the `QG_ColorBox` precedent
+     covers only the *adding* half. `QG_ColorBox` removes its own row by **constant-text match** —
+     `QG_ColorBox::setColor` drops the last row when `itemText(count() - 1) == USER_COLOR_TEXT`
+     (`tr("User Color")`), and `addCustomColor` prunes by `itemText(cIndex) == CUSTOM_ITEM_TEXT` —
+     an idiom no row whose text changes with the name can reuse. So `QG_LineTypeBox` tracks the row
+     itself (an index member, −1 when absent) and removes it in `rebuild()`, in `setLineType()`
+     before adding another, and when the name it stood for enters the table; at most one exists at
+     a time. Without this, one row accumulates per document switch and per unknown name — the
+     failure step 9 pins.
+   - **Width, order and search** (the 300-row behaviour, measured in §11): `isValidName` permits
+     255 characters (§7 step 1) and one such row measures **1843 px** of toolbar, so every box
+     that can show a custom name sets an explicit `sizeAdjustPolicy` with a bounded
+     `setMinimumContentsLength()`, elides the row text in the view and keeps the full name in the
+     tooltip — the display cap stated once in §7 step 1 and applied here. Custom rows follow the
+     built-ins, sorted by `LC_LineType::key()` — the same fold as equality — behind one
+     non-selectable separator (`QComboBox::insertSeparator`; no separator exists in the tree, so
+     step 9 pins that `setLineType()` never lands on it and that `findData` indices still
+     round-trip). **Search**: the combos stay non-editable — `LC_PropertyLineTypeCombobox`'s
+     constructor explicitly kills its line edit (`setLineEdit(nullptr)`), so making the base class
+     editable would break the property sheet — and rely on the sorted block plus `QComboBox`'s own
+     keyboard prefix search; a filtering UI belongs to Phase 4's dialog, on the shape of
+     `LC_PenPaletteModel::setFilteringRegexp`. Measured at 337 rows: build 0.57 ms (today's 37 rows:
+     0.38 ms), silent `rebuild()` 0.43 ms, document-switch rebuild of the two persistent combos
+     2.94 ms, `showPopup` 0.25 ms → **2.0 ms**.
    - **`init()` once, `rebuild()` silent**: `init()` today ends with
      `connect(this, &QG_LineTypeBox::activated, …); setCurrentIndex(0); slotLineTypeChanged(currentIndex());`
      and `setLineType()`/`setLayerLineType()` always end with `slotLineTypeChanged(currentIndex())`,
@@ -1471,10 +2048,43 @@ never destroys a name it does not know.
      `lc_propertymatchertypes.{h,cpp}` (`TLINE_TYPE`, `initLineType`, `LINE_TYPE`,
      `LINE_TYPE_RESOLVED`) and the `LC_GenericEntityMatcher<RS2::LineType>` cast in
      `lc_dlgquickselection.cpp` · `createMatcher`. PR-3 is sized accordingly (§10).
-2. Icons for custom types painted at run time (`QPixmap` 32×12, `QPen(CustomDashLine)` with the
-   painter's conversion, palette text colour, cached by name+pattern); built-ins keep their
-   `.lci`. `LC_PenInfoRegistry`: name path with enum fallback (its `const` getters already return a
-   default for an unknown enum without inserting, §0.4).
+2. **Icons for custom types, painted at run time** — `QPen(Qt::CustomDashLine)` with the painter's
+   conversion (§5 step 3) and the palette text colour, over the canonicalised pattern; built-ins
+   keep their `.lci`.
+   - **Cache key = (identity, colour, size, devicePixelRatio)**, not "name + pattern". Colour comes
+     from the palette and follows the theme, size from the host widget, `dpr` from the screen the
+     window is on; keying on name and pattern alone pins the first theme, the first size and the
+     first screen's `dpr` for the life of the process. The identity half is the pen's fold id or the
+     table row's folded key (§4 step 4) — never a case-insensitive text compare.
+   - **Invalidation**: clear on `QC_ApplicationWindow::iconsRefreshed` and on the
+     `LC_LineTypeListListener` notifications of §4 step 5 (a Phase-4 pattern edit changes what the
+     icon shows). That signal already fires on exactly the two key components this cache adds:
+     `QStyleHints::colorSchemeChanged` (colour) and `QGuiApplication::primaryScreenChanged` (`dpr`),
+     plus `QPixmapCache::clear()` + `fireIconsRefresh()` from `lc_dlgiconssetup.cpp` and
+     `lc_widgetoptionsdialog.cpp`. Today nothing would invalidate a registry-held icon: the only
+     `iconsRefreshed` listeners in the tree are `LC_UCSStateWidget`, `LC_AnglesBasisWidget` and
+     `QG_MouseWidget` (`lc_widgetfactory.cpp`). Repainting all 300 costs 1.44 ms (4.8 µs each), so
+     invalidation is cheap and its absence is the only thing that would keep a stale icon on screen.
+   - **Owner and eviction**: `LC_PenInfoRegistry::instance()` is a process-wide leaked singleton
+     (`static LC_PenInfoRegistry* uniqueInstance`) whose linetype icons live in a
+     `QMap<RS2::LineType, QIcon>` with no document hook and no eviction, so the custom-icon cache is
+     a **separate, bounded** member of that registry: keyed as above, cleared on `iconsRefreshed`
+     and on `lineTypeListModified`, and dropped for a document's names when its list listener
+     detaches — so closing a 300-linetype drawing cannot leave its icons in the process for the
+     session. Measured RSS: 1.81 MB for a 300-icon cache, 2.75 MB at `dpr` 2.
+   - **Size**: built-ins are SVG behind the `.lci` aliases (`librecad/res/controls/controls.qrc` ·
+     `linetype00.lci`–`linetype09.lci`), so they scale to whatever `iconSize` asks; a fixed 32×12
+     `QPixmap` does not, and is shown at **16×6** — nothing in the tree calls `setIconSize` on a
+     `QG_LineTypeBox` (the `updateWidgetSettings` helpers of `LC_GraphicViewAwareWidget` and
+     `LC_DlgQuickSelection` walk `QToolButton` children only), so the boxes run at the style's
+     small-icon size. Either raise the combo's `iconSize` to the 32×12 the icon is drawn at, or
+     paint at the size the host asks for and at the host's `dpr`
+     (`QPixmap::setDevicePixelRatio`) — the latter is what the cache key above exists for.
+   - `LC_PenInfoRegistry` keeps the enum path as fallback (its `const` getters already return a
+     default for an unknown enum without inserting, §0.4); the name path resolves through the
+     document's table.
+   - **No interning here**: painting or caching an icon never mints an id (§4 step 4). The cache is
+     keyed by an identity a pen or a table row already carries, never by text typed into a dialog.
 3. `QG_WidgetPen` gains `setLineTypeList(LC_LineTypeList*)`, called **before** the first
    `setPen()` (that is where `cbLineType->init()` runs — in
    `QG_DialogFactory::requestNewLayerDialog`/`requestEditLayerDialog` that means beside the
@@ -1516,30 +2126,51 @@ never destroys a name it does not know.
    step 1, the record entering the table only on first use (§2). The
    `RS_Settings` default pens stay on the enum; the pen palette has its own step 7.
 5. Property sheet: `LC_PropertyLineType` carries the list (like `LC_PropertyLayer`), equality by
-   name (its `ValueType` and the ~15 instantiation sites that change with it are listed in
-   step 1); quick select compares names (`LC_PropertyMatcherTypes::STRING` exists); quick info
-   shows the name.
+   **folded key or interned id** — never `Qt::CaseInsensitive`, measured at **1.04 ms** against
+   0.21 ms (enum) and 0.28 ms (exact `QString`) over 200k entities — (its `ValueType` and the ~15
+   instantiation sites that change with it are listed in
+   step 1); quick select compares identities under the same rule
+   (`LC_PropertyMatcherTypes::STRING` exists); quick info shows the **name**.
 6. GUI harness (fork, VNC/xdotool): open the fixture, read the name in Properties, assign a
    custom type from the pen toolbar, save, verify with `check_dxf_linetype.py`; and Pen > Pick
    from a custom-typed line, draw a line, save — `check_dxf_linetype.py` must report the custom
-   name on both `LINE`s.
-7. Pen palette (`penpalette.lcpp`, **not** `.lcp`): `LC_PenItem` gains the linetype name as
-   identity beside `m_lineType` (its current `m_lineTypeName` is registry display text, not an
-   identity); `doApplyPenAttributesToSelection`, `createPenByEditor`, `createPenByPenItem`,
+   name on both `LINE`s. Plus the **window-switch** case: with `VENDOR_TAB` active in document A,
+   activate document B's window, draw one line in B and save it — `check_dxf_linetype.py` reports
+   `VENDOR_TAB` on B's `LINE` and B's `LTYPE` table carries the Q5 marker record (§4 step 7). That
+   is the activation path of step 9, end to end.
+7. Pen palette (`penpalette.lcpp`, **not** `.lcp`): `LC_PenItem` gains the linetype **name** — never
+   an id — beside `m_lineType`, as **`m_lineTypeRecordName`** with `getLineTypeRecordName()`
+   (§0.4 (4)). Verified in the tree: `lc_penitem.h` already declares
+   `m_lineTypeName` **and** a `getLineTypeName()` accessor spelled exactly like the pen's, holding
+   registry display text rather than an identity, so the new member takes its own spelling instead
+   of overloading that one. A name is the right form here on its own merits: the palette is read **before
+   any document exists**, `.lcpp` is a persisted form, and **no id ever reaches `.lcpp`**
+   (§4 step 4). `doApplyPenAttributesToSelection`, `createPenByEditor`, `createPenByPenItem`,
    `doFillPenEditorByPen` and `doUpdatePenEditorByPenAttributes` take/produce a name-carrying
-   `RS_Pen` instead of `RS2::LineType`; `doSelectEntitiesThatMatchToPenAttributes` compares names
-   case-insensitively (`RS2::LineTypeUnchanged` keeps meaning "any"), so selecting by `CONTINUOUS`
-   no longer selects every custom-named entity whose cache is `SolidLine`;
+   `RS_Pen` instead of `RS2::LineType`; `doSelectEntitiesThatMatchToPenAttributes` compares
+   **fold ids** (`RS2::LineTypeUnchanged` keeps meaning "any"), so selecting by `CONTINUOUS`
+   no longer selects every custom-named entity whose cache is `SolidLine` — the behavioural claim is
+   unchanged and becomes an integer compare;
    `LC_PenPaletteModel::setupItemForDisplay` resolves text and icon by name first, registry
-   fallback. `cbType` is connected to `currentIndexChanged`, so it is refilled only through the
-   silent `rebuild()` of step 1 and the rebuild must not mark the editor dirty. Persistence:
-   `toStringRepresentation` appends the name as an optional **5th** field after the pen name,
-   written only for non-built-in names; `fromStringRepresentation` accepts `size() == 4` (legacy,
-   name = `lineTypeToName(enum)`) or `size() == 5` with a syntactically valid DXF table name in
-   field 5 — the palette is read before any document exists, so no table lookup is possible there
-   and the name is resolved against the document when the pen is applied. A legacy line whose pen
-   name contains a comma is still rejected, as today, and released builds (`size() == 4` only)
-   drop the 5-field lines — stated in the PR.
+   fallback, taking the icon from the cache of step 2 (same key, same invalidation). It is also the
+   site that today overwrites the palette item's display label —
+   `penItem->setLineTypeName(m_registry->getLineTypeText(lineType))` — which is why the identity
+   member added here must be a differently named one. `cbType` is connected to
+   `currentIndexChanged`, so it is refilled only through the
+   silent `rebuild()` of step 1 and the rebuild must not mark the editor dirty. **Persistence — a
+   new file, never a 5th field in the old one** (spec stated once, in §0.4): Phase 3 writes
+   `penpalette2.lcpp` with five percent-escaped fields in the order
+   `lineType,lineWidth,colour,lineTypeName,penName` — the record name **before** the free-text pen
+   name, which stays last — and reads the legacy `penpalette.lcpp` once to migrate it, leaving that
+   file untouched afterwards. Appending a 5th field to the legacy file is precisely what this plan
+   must not do: `fromStringRepresentation` requires exactly 4 fields and returns `nullptr` for a
+   5-field line, `loadItems` drops the row and still returns `true`, and the next `saveItems()`
+   writes the loss back (§0.4) — the row is deleted, not degraded, and the directory is shared
+   between installs, so it repeats. The escaping also fixes today's silent rejection of any pen name
+   containing a comma. Field 4 carries a **name**, never an interned id (§4 step 4 (iv)): the palette
+   is read before any document exists, so nothing could resolve an id there, and the name is matched
+   against the document only when the pen is applied. 2.2.1 reads only the legacy file, so a
+   custom-typed pen is invisible to it rather than dropped by it — stated in the PR.
 8. Dimension styles: `LC_DlgDimStyleManager::init` feeds `cbDimLineLineType`, `cbExtLineType1` and
    `cbExtLineType2` from `m_originalGraphic->getLineTypeList()`; `fillLinesTab` selects by raw name
    (`lineTypeName()`, `lineTypeFirstRaw()`, `lineTypeSecondRaw()`); `onDimLineTypeChanged`,
@@ -1572,15 +2203,49 @@ never destroys a name it does not know.
      unchanged and neither document's `getActivePen()` changed; one simulated `activated`
      afterwards emits exactly once.
    - toolbar identity: a toolbar bound to a graphic holding `VENDOR_TAB`, fed the matching pen,
-     reports `getPen().getLineTypeName() == "VENDOR_TAB"`.
+     reports `getPen().getLineTypeName() == "VENDOR_TAB"` (the accessor is unchanged — the public
+     API stays the name).
+   - no id churn: repeated selection of the same row, repeated silent `rebuild()`s and repeated
+     document switches with that pen active mint **no new ids** — the same spelling interns to the
+     same id (§4 step 4), which is what keeps an append-only table out of its 65 535 cap.
+   - temporary row, added **and removed**: a box bound to a list without `VENDOR_TAB`, fed that name
+     three times across two silent `rebuild()`s, holds **exactly one** temporary row, and `count()`
+     returns to its baseline once a known name is selected or the record enters the table — the
+     accumulation the `QG_ColorBox` constant-text idiom cannot prevent (step 1).
+   - order, separator and width: custom rows follow the built-ins sorted by `LC_LineType::key()`
+     behind one separator; `setLineType()` never selects the separator, `findData` round-trips for
+     the rows on both sides of it, and a 255-character name leaves `sizeHint()` bounded while
+     `toolTip()` carries the full name.
+   - icon cache: the same identity requested at two sizes, two palette colours or two
+     `devicePixelRatio`s yields **distinct** entries; one `QC_ApplicationWindow::iconsRefreshed`
+     emission empties the custom-icon cache (a test-visible `size()`), and a pattern edit delivered
+     through `LC_LineTypeListListener` drops that name's entries. Painting an icon mints no id
+     (step 2).
+   - activation path — the D1 consequence of §2, and a case **beside** T11, not a replacement for
+     it (T11 keeps its own subject, the `QG_WidgetPen` round-trip of §4 step 4b): the chain is
+     `QMdiArea::subWindowActivated` → `QC_ApplicationWindow::slotWindowActivated` →
+     `LC_MDIApplicationWindow::doWindowActivated` → `slotPenChanged(m_penToolBar->getPen())` →
+     `QC_MDIWindow::slotPenChanged` → `RS_Document::setActivePen`, after which
+     `LC_UndoSection::setupAndUndoableAdd` stamps `graphic->getActivePen()` on every entity it adds
+     (all four hops verified in the tree). No test in the tree constructs a `QC_MDIWindow`, so the
+     unit case drives the reachable seam: graphic A holds `VENDOR_TAB`, graphic B does not; take the
+     toolbar's pen while A is current, hand it to `B.setActivePen()`, add an entity through
+     `LC_UndoSection` → that entity reports `getPen(false).getLineTypeName() == "VENDOR_TAB"` with
+     the **same id** (the intern table is process-wide, §4 step 4), B's table gains **no** record,
+     and saving B synthesises the Q5 marker record (§4 step 7). The end-to-end version is the
+     harness case of step 6.
    - property equality and matchers: the `"linetype"` equality lambda reports "multiple values"
      for `VENDOR_TAB` vs `VENDOR_UTL` (same cached enum); the quick-select matcher for
-     `VENDOR_TAB` does not match a `CONTINUOUS` entity, and vice versa.
-   - palette persistence: `LC_PenPaletteData::fromStringRepresentation("6,0,#ff0000,Pen A")`
-     parses with name `"DASHED"`; `"1,0,#ff0000,Pen B,VENDOR_TAB"` parses with
-     `getLineTypeName() == "VENDOR_TAB"`; both round-trip through `toStringRepresentation`;
-     `"1,0,#ff0000,Pen,C"` is still rejected. Select-by-pen distinguishes `VENDOR_TAB` from
-     `CONTINUOUS` with the same cached enum.
+     `VENDOR_TAB` does not match a `CONTINUOUS` entity, and vice versa — both as fold-id compares
+     (step 5), and both reporting one value for `Vendor_mixedCase` vs `VENDOR_MIXEDCASE`.
+   - palette persistence (the versioned file of §0.4, not a 5th field in the legacy one): a legacy
+     line `LC_PenPaletteData::fromStringRepresentation("6,0,#ff0000,Pen A")` parses with
+     `getLineTypeRecordName() == "DASHED"` and migrates once into `penpalette2.lcpp`, which leaves
+     `penpalette.lcpp` byte-unchanged; a new-format line `"1,0,#ff0000,VENDOR_TAB,Pen B"` parses
+     with `getLineTypeRecordName() == "VENDOR_TAB"` and pen name `"Pen B"`; both round-trip through
+     `toStringRepresentation`; `"1,0,#ff0000,,Pen%2CC"` round-trips to the pen name `"Pen,C"` — the
+     comma a legacy line still loses — and a legacy `"1,0,#ff0000,Pen,C"` is still rejected.
+     Select-by-pen distinguishes `VENDOR_TAB` from `CONTINUOUS` with the same cached enum.
    - `QG_WidgetPen` with a **null** list shows only the built-in rows (33, plus By Layer/By Block
      and `- Unchanged -` when asked for) and still returns the name of a custom-named pen through
      the temporary row; harness: the Layer-tree options dialog and the Quick info options dialog
@@ -1626,7 +2291,32 @@ and never needs an external script again.
    records created by the dialog or by `.lin` import and returns `nullptr` with the reason, so no
    pen can carry a name the writer refuses; names arriving through the DXF/DWG/DXF1/SHP filters
    are **kept verbatim** (§4 step 6 — the file is the authority, and layer and block names are
-   not validated either). The `.lin` reader trims names and names the offending line in its
+   not validated either). (`LC_UCS::isValidName` is today a `return true` stub carrying a `fixme`,
+   so the precedent is its signature and its dialog call site `lc_dlgucsproperties.cpp`, not its
+   rules.)
+   **Version-dependent rule, and where it lives**: R12 is not a stricter *table* rule, it is a
+   different *written* name. `dxfRW::writeEntity` writes group 6 with `writeUtf8String` above
+   `AC1009` and with `writeUtf8Caps` at or below it, and `dxfRW::writeLineType` does the same for
+   the record's group 2; `dxfWriter::writeUtf8Caps` runs `std::toupper` over **every byte** of the
+   UTF-8 string before the codec encodes it (in the classic locale that folds ASCII only, but the
+   transform is byte-wise and locale-dependent). So an R12 save turns `Vendor_mixedCase` into
+   `VENDOR_MIXEDCASE` — §3 T4 pins exactly that pair — and touches non-ASCII bytes before
+   `encoder.fromUtf8` sees them, with R12's 31-character symbol-name limit on top. Since one table
+   is saved to several versions, `LC_LineType::isValidName` stays **version-free**, and a second
+   pure predicate `LC_LineType::isR12SafeName(const QString&)` (ASCII only, at most 31 characters,
+   unchanged by the byte-wise upper-casing) carries the version knowledge. It drives **one
+   save-time warning** naming the affected records when the chosen format is R12/`AC1009`, and the
+   same predicate drives the dialog warning of step 2, so the two cannot drift. Nothing is silently
+   rewritten: the writer's fold stays the writer's business.
+   **What the UI must display**: the rule permits 255 characters and one such name measures 1843 px
+   of combo (§11), so the dialog's name field caps input at 255 characters and every list that can
+   show a custom name uses the bounded width, elide and tooltip of §6 step 1.
+   **What is interned**: a name the validator refuses is **never interned** (§4 step 4) — the
+   dialog validates first and interns only on commit, never per keystroke or per preview; `.lin`
+   import
+   interns only the records `add()` accepted; names arriving through the filters are interned
+   verbatim at import, once per entity, because there the file is the authority.
+   The `.lin` reader trims names and names the offending line in its
    diagnostic; a record whose name folds onto a built-in under `LC_LineType::key()` (`*dashed` vs
    `DASHED`) is skipped with a diagnostic rather than offered as a replacement — built-ins are
    read-only (§4 step 2) and their on-screen look is fixed (§12).
@@ -1635,9 +2325,11 @@ and never needs an external script again.
    export `.lin`; built-ins are read-only. The name field refuses invalid names inline (step 1),
    the reserved `BYLAYER`/`BYBLOCK`/`CONTINUOUS`, and duplicates under `LC_LineType::key()` —
    the shape of `QG_DlgOptionsDrawing::askForUniqueDimStyleName`. Saving as R12 with a custom
-   name longer than 31 characters or carrying non-ASCII letters draws one warning
-   (`dxfWriter::writeUtf8Caps` folds ASCII only and the codec escapes the rest as `\U+XXXX`, so
-   a CAM reader matching by name may not find it).
+   name that `LC_LineType::isR12SafeName()` rejects — longer than 31 characters, or carrying
+   non-ASCII letters — draws one warning, from the same predicate and with the same wording as the
+   save-time warning of step 1, so the dialog and the save path cannot drift
+   (`dxfWriter::writeUtf8Caps` upper-cases the name byte by byte and the codec escapes what it
+   cannot encode as `\U+XXXX`, so a CAM reader matching by name may not find it).
    **Rename and delete follow the Dimension Styles tab, not `removeLayer()`**: they are offered
    only for custom entries that are **not in use**, usage being computed as
    `QG_DlgOptionsDrawing::collectStylesUsage`/`updateActionButtons` do for dim styles — the pens
@@ -1693,7 +2385,13 @@ Tests (`librecad_tests`, `[linfile]` and `[linetype][ui]`):
   validation prevents — the shape of the existing *"DXF export rejects malformed typed conversion
   sidecars"* case.
 - the dialog's name field refuses the same names, `BYLAYER`/`BYBLOCK`/`CONTINUOUS`, and a
-  duplicate under `LC_LineType::key()`.
+  duplicate under `LC_LineType::key()`, and caps input at 255 characters.
+- `LC_LineType::isR12SafeName()` accepts `VENDOR_TAB` and rejects both a 32-character name and one
+  carrying `Ö`; saving that document as R12 draws exactly **one** warning naming both records,
+  saving it as AC1021 draws none, and neither save rewrites a name in the table.
+- a name `isValidName` refuses mints **no** id: the intern table's size is unchanged across a
+  rejected dialog commit, a skipped `.lin` record and a failed `LC_LineTypeList::add()`
+  (§4 step 4 — the table is append-only and capped at 65 535).
 - `*dashed` in a `.lin` folds onto the built-in `DASHED`: skipped with a diagnostic, the
   built-in's pattern and screen look unchanged (§12).
 - rename and delete are disabled while an entry is referenced by an entity, a layer pen, a dim
@@ -1729,7 +2427,11 @@ is *declared* continuous and Phase 2 draws it solid — stated in the PR descrip
    built on `RS_Graphic::collectReferencedLineTypeNames()` (§4 step 6), the destination entry
    winning a `LC_LineType::key()` clash and built-ins never being replaced (§4 step 2). The
    built-ins themselves need no copying: `LC_LineTypeList`'s constructor seeds them, so even a
-   bare `new RS_Graphic()` has them (§4 step 2). The paths:
+   bare `new RS_Graphic()` has them (§4 step 2). **What needs no copying at all is the identity**:
+   the pen works unchanged on every path below, because an interned id means the same spelling in
+   every document — on `RS_Clipboard`'s singleton graphic and in clones that outlive their source,
+   which `LC_ActionBlockLibraryInsert::reset()` deletes outright. What travels between documents is
+   the **record** (the pattern); the id never does, and never needs to (§4 step 4, §12). The paths:
    - `lc_copyutils.cpp` · `LC_CopyUtils::doCopyEntity` / `doCopyEntityLayer` / `doCopyBlock` —
      add the records referenced by the entity, by its layer and by the block members to the
      clipboard graphic; `rs_clipboard.cpp` · `RS_Clipboard::clear()` already resets the clipboard's
@@ -1778,10 +2480,17 @@ is *declared* continuous and Phase 2 draws it solid — stated in the PR descrip
      where `getDimensionLineType()` returns `m_dimStyleTransient->dimensionLine()->lineType()`),
      so a style whose `DIMLTYPE` names a custom type draws its dimension and extension lines as
      the nearest built-in — solid for vendor patterns — on screen, on paper and in every export,
-     while the file round-trips the name correctly. They must set the name on the pen:
-     `result.setLineTypeName(dimensionLine()->lineTypeName())`, resp.
-     `extensionLine()->lineTypeFirstRaw()` / `lineTypeSecondRaw()`, calling the setter only when
-     the raw name is non-empty so that the `""` default of `DIMLTEX1/2` keeps the enum-built pen.
+     while the file round-trips the name correctly. They must set the **identity** on the pen — from
+     `dimensionLine()->lineTypeName()`, resp. `extensionLine()->lineTypeFirstRaw()` /
+     `lineTypeSecondRaw()`, and only when the raw name is non-empty so that the `""` default of
+     `DIMLTEX1/2` keeps the enum-built pen. **Not, however, as a per-child string hash**: verified
+     that `getPenDimensionLine()`/`getPenExtensionLine()` are called from
+     `createHorizontalTextDimensionLine`, `createAlignedTextDimensionLine`, `addDimExtensionLine`
+     and `addDimArc` — i.e. **per dimension rebuild**, not once — so a literal
+     `result.setLineTypeName(dimensionLine()->lineTypeName())` would intern a spelling per dimension
+     child per rebuild. Cache the interned id on the transient dim style beside the raw name and set
+     it through an id-taking setter; the name-taking setter runs only when that cache is cold
+     (§11).
      This is the cheapest and most visible win of the ladder — the name is already persisted —
      so it lands here, beside the dim-style work it belongs to (T10 leaves dimension pens to this
      phase); pulling it forward into PR-1, next to §4 step 4b, is a two-line change if that PR has
@@ -1815,7 +2524,10 @@ is *declared* continuous and Phase 2 draws it solid — stated in the PR descrip
    name LibreCAD writes maps back to the same RS2::LineType"*) stays the oracle; a JWW round-trip
    test is not possible.
 5. **Tests**, one per path (`librecad_tests`, `[linetype][parity]`), each against a source graphic
-   whose table holds `VENDOR_TAB` `{20,-20}`:
+   whose table holds `VENDOR_TAB` `{20,-20}`. Every `getLineTypeName()` assertion below is unchanged
+   — the accessor is — and the three cross-document paths (copy/paste, XREF, plugin) additionally
+   assert that the destination pen reports the **same interned id** as the source pen, which is the
+   property a pointer or a document-scoped index could not provide (§2 Q2, §12):
    - **copy/paste**: `LC_CopyUtils::copy(ref, entities, &src)` of a line whose pen carries
      `setLineTypeName("VENDOR_TAB")` → `RS_CLIPBOARD->getGraphic()->findLineType("VENDOR_TAB")->pattern == {20,-20}`;
      `LC_CopyUtils::paste(RS_PasteData{…}, &dest, ctx)` into a fresh `RS_Graphic` → the pasted
@@ -1864,12 +2576,49 @@ Carry linetype names through copy/paste, dimension styles and plugins (#1738)
 paper). Closes #1476. Changes how every existing drawing looks, so it ships behind a document
 option defaulting to today's behaviour. Not started without an explicit go from maintainers.
 
+What the render study settles about this phase **before** it starts:
+
+- **One factor, applied once, to the pattern *and* to the phase.** That is the lesson of §5 step 3:
+  the running dash offset and the pattern elements must live in the same units, and today
+  `$DIMSCALE` is applied **twice** to the offset and never to the pattern. Phase 6 would read
+  `$LTSCALE` beside `$DIMSCALE` in `lc_graphicviewportrenderer.cpp` ·
+  `updateUnitAndDefaultWidthFactors` (the one place a scale variable is read at all — no renderer
+  reads `$LTSCALE`/`$PSLTSCALE`/`$CELTSCALE` today, §0.3), so whatever factor it introduces must
+  multiply the canonical pattern and the accumulated offset by the same number, in one place.
+  Getting that wrong is not cosmetic: it is the ~15 px stub §5 step 3 measures.
+- **Drawing-unit mode walks into two Qt cliffs that device-millimetre mode cannot reach.** Periods
+  would then follow zoom, so they cross both guards of §5 step 3(ii) in normal use:
+  `QDashStroker::repetitionLimit() == 10000` draws a subpath **solid** past 10000 periods (a 6 px
+  period reaches that at 60 000 px of line, while today's 86–174 px periods never do), and the
+  `std::max(k·|d|, 1.)` clamp turns a zoomed-out pattern into a solid-looking comb before that.
+  Both guards must already exist and be tested, which is why they are PR-2's (§5 step 3(ii)) and
+  not this phase's.
+- **Cost is dominated by pen width, not by the scale.** Qt's raster `fast_pen` requires width ≤ 1:
+  measured on 50 000 1500-px dashed lines, **135.3 ms at width 1.000 against 816.6 ms at 1.001**, a
+  6× cliff held off today only by `if (screenWidth < 1) screenWidth = 0.0;` in the renderers. A
+  scale mode shipped next to lineweight display, HiDPI or deep zoom multiplies dashed cost by that
+  factor, so its benchmark must report both width regimes — and both antialiasing states, since
+  LibreCAD ships antialiasing **off**, where dashing costs +24–37 %, while with it on dashes can be
+  *cheaper* than solid.
+- **"Consistent on paper" has to be proved against four devices, not one.** §5 step 5's inventory:
+  the PNG/JPG exporters and the library thumbnails paint into a `QPixmap` whose `widthMM()` follows
+  the user's monitor, and both SVG exporters never call `setResolution`, so Qt's default 72 dpi pins
+  the sheet (a 1000-px export is 352.8 mm, `dpmm` ≈ 2.835). Only `LC_Printing` /
+  `pdf_print_loop.cpp` see a real device resolution. A paper-consistency promise tested on the
+  printer alone is untested on three of the four paths a user will try.
+- **Group 48 is not this phase's to invent.** `DRW_Entity::ltypeScale` is parsed on both read paths
+  and dropped on write today; the plan treats that as a write-side loss, fixed where the other
+  write-side losses are (§0.4), and Phase 6 only *consumes* the per-entity scale once it survives a
+  round-trip.
+
 ---
 
 ## 10. Commit Ladder (summary)
 
 | # | Phase | Commit |
 |---|---|---|
+| 0a | — (pre-ladder) | `Do not dereference a null linetype pattern; rebuild the dashed QPen only when it changes` |
+| 0b | — (pre-ladder) | `Compare the dash offset only for pens that draw a pattern (#1922)` |
 | 1 | 0 | `test(linetype): red tests and neutral fixture for named linetypes (#1738)` (folded into 2b unless tests-first is preferred) |
 | 2a | 1 | `refactor(linetype): move the built-in linetype table out of RS_FilterDXFRW into the engine (#1738)` |
 | 2b | 1 | `Keep custom linetype names and patterns across DXF/DWG round-trips (#1738)` |
@@ -1879,13 +2628,146 @@ option defaulting to today's behaviour. Not started without an explicit go from 
 | 6 | 5 | `Carry linetype names through copy/paste, dimension styles and plugins (#1738)` |
 | 7 | 6 (opt.) | `Scale linetype patterns by $LTSCALE and drawing units (#1476)` |
 
+**Rows 0a and 0b are not part of this feature.** They are two pre-existing defects in master's
+dashed path, both measured (render study §3.2), neither needing any part of this plan, and both
+getting worse in exact proportion to how many entities carry a non-solid linetype — which is what
+named linetypes increase. They are upstreamable on their own merits, so they are numbered **0a/0b**,
+land **before** PR-1 and **do not renumber PR-1…PR-5**. If maintainers take them and reject the
+rest, LibreCAD is still better off; if they land after PR-1 instead, nothing in §4–§8 changes.
+
+**PR-0a — harden `RS_Painter`.** *Goal*: remove a crash that is already shipped, and stop rebuilding
+the dashed `QPen` for every entity.
+
+1. **Null guard.** `rs_linetypepattern.cpp` · `RS_LineTypePattern::getPattern` returns `nullptr` for
+   any enum missing from its static map — `RS2::LineTypeUnchanged` (= 26) is one — and
+   `rs_painter.cpp` · `rsToQDashPattern` dereferences it unchecked
+   (`RS_LineTypePattern::getPattern(t)->pattern`). `rsToQtLineType` sends every enum that is not
+   `NoPen`/`SolidLine`/`LineByLayer`/`LineByBlock` down that branch, so a stale `QSettings` integer
+   reaches it through the pens that bypass the six pen-preparation sites: the grid
+   (`RS_Grid::loadSettings` → `LC_GridSystem::drawGrid`/`drawMetaGrid`), the snap indicator
+   (`RS_Snapper::initFromSettings` → `LC_Crosshair::draw`), the selection overlay (`RS_OverlayBox`)
+   and `readPen` (§0.3). Fall back to solid on null — the empty-pattern → solid fallback already
+   exists in `setPen`. §0.4's integer-persistence inventory is the other half of the same hazard.
+2. **Change detection in the dashed branch.** `RS_Painter::setPen(const RS_Pen&)`'s
+   `Qt::CustomDashLine` branch builds a fresh `QPen`, calls `setDashPattern` (a heap
+   `QVector<qreal>`), `setDashOffset`, `setJoinStyle`, `setCapStyle`, assigns `m_lastUsedPen`, calls
+   `QPainter::setPen` and **`return`s before** the `bool changed` block the solid path below it
+   uses. Measured: one `QPen` construction and one `setDashPattern` per entity — 200 000 for 200 000
+   dashed entities — the dashed build path costing **152.0 ns/call** against the solid branch's
+   **12.8 ns** compare, the `QVector<qreal>` alone ~28 ns. Give the dashed branch the same
+   treatment: compare colour, width, style, dash pattern and dash offset against `m_lastUsedPen`,
+   and call `QPainter::setPen` only when one of them moved.
+3. No API change, no new product file, no build-list edit for product code.
+
+**What PR-0a does not fix**: an entity that legitimately moves the offset still rebuilds
+(`RS_Painter::updateDashOffset` decrements the running offset by each drawn length), so the win is
+on repeats of one pen and on everything that never touches the offset. How large it is belongs in
+the PR description, measured with the gate below — it is not predicted here.
+
+*Validation* (on top of §1.1's canonical pair):
+```bash
+python3 ../tools/lc_render_bench.py build "$SCRATCH/rb_pr0a" --reps 5 --procs 9 --pen-counts
+python3 ../tools/lc_render_bench.py --compare \
+  ../test-results/named-linetypes/render_baseline/runA.summary.json "$SCRATCH/rb_pr0a/summary.json"
+QT_QPA_PLATFORM=offscreen build/librecad_tests "[painter]" -s
+```
+- `fit` rows within ±3 % of the recorded baseline (measured noise floor ±1.8 %); `zoom40` rows
+  reported, never gated below ±25 % (§11).
+- `LD_PRELOAD` pen counts: `QPen` constructions on the `*/dashed/fit` rows fall below one per
+  entity, while `QPainter::setPen` counts stay **identical** to baseline — this PR changes what is
+  rebuilt, never what is cached; that is PR-0b.
+- A new unit case in `librecad/src/lib/gui/tests/` (the directory `rs_graphicview_close_tests.cpp`
+  already occupies — one repo-root-relative line in the `qt_add_executable(librecad_tests …)` source
+  list, §1.1): a pen carrying `RS2::LineTypeUnchanged` through `RS_Painter::setPen` paints solid
+  instead of crashing.
+
+*Commit*:
+```
+Do not dereference a null linetype pattern; rebuild the dashed QPen only when it changes
+
+RS_LineTypePattern::getPattern() returns nullptr for every RS2::LineType
+missing from its table (RS2::LineTypeUnchanged is one), and rsToQDashPattern
+dereferenced it unchecked. Stale QSettings values reach that path through the
+grid, the snap indicator and the selection overlay, none of which pass a
+renderer's pen preparation. Fall back to a solid pen instead.
+
+The Qt::CustomDashLine branch of RS_Painter::setPen also returns before the
+change-detection block the solid branch uses, so every dashed entity built a
+fresh QPen and a fresh dash pattern vector. Give it the same guard.
+```
+
+**PR-0b — let the pen cache work for dashed entities.** *Goal*: stop one dashed entity from
+defeating the #1922 pen cache for the rest of the frame, and stop paying two pen copies per entity
+on every cache hit.
+
+1. `rs_pen.h` · `RS_Pen::isSameAs` ends with `LC_LineMath::isSameLength(m_dashOffset, patternOffset)`
+   (tolerance `RS_TOLERANCE` = 1e-10), while `rs_painter.cpp` · `RS_Painter::updateDashOffset`
+   decrements the running offset by every drawn entity's length, so the term is false for
+   effectively every entity once anything dashed has been drawn. Measured with breakpoint counts on
+   the real pipeline: 300 solid lines → **1** `RS_Painter::setPen` call; 300 dashed lines → **300**;
+   2000 lines with **one dashed first** → **2000**, the same 2000 with the dashed one **last** →
+   **2**. Cost of that alone: 628.3 → 682.4 ns/entity, **+54 ns/entity (+8.6 %)**.
+2. Compare the offset **only for pens that actually draw a pattern**. Pre-ladder that predicate is
+   the painter's own — `rsToQtLineType(pen.getLineType()) == Qt::CustomDashLine`, i.e. any enum that
+   is not `NoPen`/`SolidLine`/`LineByLayer`/`LineByBlock`: a solid pen's `m_dashOffset` cannot
+   change what it paints, so it does not belong in the cache key. **Forward obligation on PR-2**:
+   from the moment an identity can make a pen dashed whose cached enum is `SolidLine` (§5 step 2),
+   the predicate must follow the **resolved pattern** and not the enum — which is what `m_lpenDashed`
+   (§5 step 1) records. An enum-only predicate left in place there would silently stop applying the
+   offset to custom patterns.
+3. **Hoist the `originalPen` copy below the cache early-return.** Four sites keep one (verified):
+   `lc_graphicviewrenderer.cpp` · `LC_GraphicViewRenderer::setPenForEntity` and
+   `setPenForDraftEntity`, `lc_printpreviewviewrenderer.cpp` and `lc_printviewportrenderer.cpp` ·
+   `setPenForPrintingEntity`; the other two of §0.3's six pen-preparation sites keep none. Each does
+   `RS_Pen pen = e->getPenResolved();` then `const RS_Pen originalPen = pen;` then the `isSameAs`
+   early return, so **every entity pays two full `sizeof(RS_Pen)` = 104-byte copies even on a cache
+   hit**. Nothing between the copy and the return reads `originalPen`, and its only consumer —
+   `m_lastPaintEntityPen.updateBy(originalPen)` — runs far below. The hoist is free, it ships here
+   because this PR is about the cache probe, and it is the multiplier on any field the ladder later
+   adds to `RS_Pen` (§4 step 4).
+4. No API change beyond the body of `isSameAs`; no new product file.
+
+*Validation*:
+```bash
+python3 ../tools/lc_render_bench.py build "$SCRATCH/rb_pr0b" --reps 5 --procs 9 --pen-counts
+python3 ../tools/lc_render_bench.py --compare \
+  ../test-results/named-linetypes/render_baseline/runA.summary.json "$SCRATCH/rb_pr0b/summary.json"
+QT_QPA_PLATFORM=offscreen build/librecad_tests "[linetype],[painter]" -s
+```
+- `*/dashed/fit` and `*/mixed/fit` rows improve; `*/solid/fit` rows stay within ±3 % — they already
+  reach Qt with **one** `setPen` call for the whole drawing and must keep doing so.
+- The pen counts are the assertion, not the milliseconds: the study's §3.2 shape — 2000 entities,
+  one dashed **first** — must report **2** `RS_Painter::setPen` calls, not 2000.
+- Unit case beside PR-0a's: a `SolidLine` pen whose `m_dashOffset` differs from the painter's
+  current offset **is** `isSameAs` (today it is not), while two `DashLine` pens with different
+  offsets are still **not** — the offset stays in the key exactly where it changes pixels. A pixel
+  case pins that dash continuity across two collinear dashed lines is unchanged.
+
+*Commit*:
+```
+Compare the dash offset only for pens that draw a pattern (#1922)
+
+RS_Pen::isSameAs() compares m_dashOffset with the painter's running offset,
+which RS_Painter::updateDashOffset decrements for every entity drawn. One
+dashed entity therefore defeats the pen cache for the rest of the frame: 2000
+entities with a single dashed line first cost 2000 RS_Painter::setPen calls
+instead of 2, +54 ns/entity. A solid pen's dash offset cannot change what it
+paints, so it does not belong in the cache key.
+
+The setPenFor* sites also copied the resolved pen into originalPen above the
+early return, paying two pen copies per entity on every cache hit; that copy
+moves below it.
+```
+
 **Why row 2 is split** (dxli's cadence — #2815 and #2823 each landed one family): Phase 1 as
 written touches ~20 files including `rs_pen.h`, and two of its concerns are separable, the first
 being a pure refactor with no behaviour change and existing test coverage. **2a and 2b are two
-commits of PR-1** (§4), not two PRs: the ladder stays at 5 PRs (+1 optional), one per phase, and
-each commit builds green on its own (§1.1), so `git bisect` still lands between them. If
+commits of PR-1** (§4), not two PRs: the ladder itself stays at 5 PRs (+1 optional), one per phase
+— preceded by the two standalone fixes of rows 0a and 0b, which are pre-ladder and carry no PR-n
+number — and each commit builds green on its own (§1.1), so `git bisect` still lands between them. If
 maintainers would rather review the refactor by itself, 2a is the natural standalone PR — the
-ladder is then 6 PRs and the PR numbers of §4–§8 shift by one.
+ladder is then 6 PRs and the PR numbers of §4–§8 shift by one; rows 0a and 0b are unaffected
+either way, being pre-ladder and numbered outside that sequence.
 
 - **2a** moves the 35-record metrics table and `nameToLineType()`/`lineTypeToName()` out of
   `RS_FilterDXFRW` into `LC_LineTypeNames` (§4 step 3); the filter keeps thin forwarders, and
@@ -1893,11 +2775,14 @@ ladder is then 6 PRs and the PR numbers of §4–§8 shift by one.
   `rs_filtershp.cpp` include the engine header instead — which also removes today's
   engine→filters include inversion. Gate: the existing `[linetype]` tests plus T6; one new `.cpp`
   in both build lists. It must land **before** 2b, because `RS_Pen` (engine) needs
-  `lineTypeToName()` without including `rs_filterdxfrw.h`. It does **not** fold
+  `lineTypeToName()` without including `rs_filterdxfrw.h`. `rs_pen.cpp` now also needs the intern
+  unit, but that unit ships **in 2b**, with the pen field it exists for — 2a stays a pure
+  no-behaviour-change refactor and adds no new engine unit. It does **not** fold
   `rs_linetypepattern.cpp` into the table: the screen run lengths differ from the DXF metrics on
   purpose (§5 step 2, §12).
-- **2b** is the rest of Phase 1 — `RS_Pen::m_lineTypeName` and the copy idioms, the filters
-  reading and writing the raw name, the marker records, the document-owned `LC_LineTypeList` —
+- **2b** is the rest of Phase 1 — `RS_Pen::m_lineTypeId` with the `lc_linetypeintern` unit behind it
+  and the copy idioms, the filters reading and writing the raw name, the marker records, the
+  document-owned `LC_LineTypeList` —
   and is the commit that pays the full `rs_pen.h` rebuild (§1.1, §11).
 
 If maintainers find 2b still too large, the natural second cut is the table itself: its first
@@ -1916,28 +2801,36 @@ no compiler warnings.
 
 | Risk | Severity | Mitigation |
 |---|---|---|
-| Maintainers prefer another architecture (global `.lin` lists, ids instead of names) | High | Phase 0 gate before any product code; §2 offers both options |
-| Renderer pen cache ignores the name → custom types drawn with the previous `QPen` | High | name in `isSameAs()`/`operator==`, enum first — see the render-cost row below |
+| Maintainers prefer another architecture (global `.lin` lists, an `RS2::CustomLine` sentinel) | High | Phase 0 gate before any product code; §2 Q2 puts all three identities on the table with the measured comparison |
+| Renderer pen cache ignores the identity → custom types drawn with the previous `QPen` | High | identity in `isSameAs()`/`operator==`, enum first — see the render-cost row below |
 | Renderer or view outlives — or predeceases — its document → dangling table pointer or stale pattern cache | High | revision counter on the table, no listener below the UI layer |
 | Any pen edit through the enum-only combo before Phase 3 rewrites a custom name to its cached built-in | Medium | "Known and accepted" in PR-1/PR-2 plus an open+save test; Phase 3's combo removes it |
-| Render-loop cost of a `QString` in `RS_Pen`: copied per entity per frame, compared in the #1922 pen cache | Low–Medium | null `QString` for built-ins; enum, width and colour compared first; PR-1 measures, target ≤ 5 % |
+| Render-loop cost of the identity in `RS_Pen`: copied per entity per frame, compared in the #1922 pen cache | Low–Medium | an interned `std::uint16_t`, not a `QString` — measured: `sizeof(RS_Pen)` unchanged at **104** and **+0.5 %** on fit rows against a ±1.8 % floor; evidence table, gate and fallback below |
+| Pre-existing: one dashed entity defeats the #1922 pen cache for the rest of the frame, and this feature moves far more entities onto that path | High | **PR-0b**, before the ladder (§10): compare the dash offset only for pens that draw a pattern; measured +54 ns/entity (+8.6 %) recovered |
+| Pre-existing: `RS_Painter::setPen` rebuilds the dashed `QPen` unconditionally (one `QPen` + one dash `QVector` per entity per frame) | Medium | **PR-0a**, before the ladder (§10): give the `Qt::CustomDashLine` branch the change detection the solid branch has |
+| Intern table exhausted (65 535 spellings) or churned by the UI (append-only, never freed) | Low | intern **only on commit**, never per keystroke, preview or failed validation (§6 step 1, §7 step 1); overflow returns id 0 and the pen degrades to its enum's canonical name (§4 step 4) |
+| Interning is not thread-safe | Low | main-thread-only **invariant** (nothing in `librecad/src` is multi-threaded — verified repo-wide); any future worker interns on the main thread or guards the table |
+| UI: PR-3 is the widest PR in the ladder and the least measured — icon cache keyed on the enum alone, no invalidation, 32×12 icons shown at 16 px, unbounded combo width, 66 `.ts` files | Medium | the icon/combo/sort/translation decisions of §6 step 1 and the exact-fold comparators of §6 steps 5 and 7 (§0.4 lists the surfaces) |
+| Dimension pens re-intern a spelling per child per rebuild | Low | cache the interned id on the transient dim style and set it through an id-taking setter (§8 step 2) |
 | LTYPE record written twice (table + metadata archive) | Medium | `writeLTypes()` emits from the table; the metadata loop only what the table lacks; test "record written once" |
 | DWG: name without record → entity ByLayer silently | Medium | synthesise records for every referenced name before layers/entities; DWG round-trip test under `DWGSUPPORT` |
-| Performance: thousands of 1 px dashes with tiny patterns | Medium | device-mm units in Phase 1; minimum on-screen period → solid (Phase 2) |
-| Integer persistence (settings, `.lcpp`, `$DIMLTYPE`, plugins) breaks | Medium | enum never renumbered; name only where a document exists; `.lcpp` 5th field optional |
+| Performance: thousands of 1 px dashes with tiny patterns | Medium | device-mm units in Phase 1; minimum on-screen period → solid, derived from `QDashStroker::repetitionLimit()` rather than guessed (§5 step 3) |
+| Integer persistence (settings, `.lcpp`, `$DIMLTYPE`, `.lcds`, plugins) breaks | Medium | enum never renumbered; name only where a document exists; `.lcpp` **versioned as a new file**, never a 5th field in the old one (§0.4) |
 | CMake/qmake drift | Medium | every commit touches both lists; fork CI (Pixi ×5) before the upstream PR |
 | `rs_filterdxfrw.cpp` reformatted between rebase and merge | Low | rebase the day of the PR; anchor by symbol |
-| Full rebuild cost of `rs_pen.h` (~820 TUs) | Low | one-off in Phase 1; later phases incremental |
+| Full rebuild cost of `rs_pen.h` (**699** translation units, measured) | Low | one-off in Phase 1; later phases incremental |
 | Case-insensitive collisions (`Dashed` vs `DASHED` in one file) | Low | list keys fold case; first record wins; test T4 |
 
 The long mitigations in full, keyed by the risk wording of the table:
 
-- **Maintainers prefer another architecture.** Phase 0 before any product code; §2 offers both
-  options with trade-offs; Phase 1 is shaped so the table can be seeded from global lists later
-  without touching the pen.
-- **Renderer pen cache ignores the name.** `isSameAs()`/`operator==` include the name (Phase 1),
-  enum first and the name last — see the render-cost row of the table; pixel test with two custom
-  types back to back (Phase 2).
+- **Maintainers prefer another architecture.** Phase 0 before any product code; §2 Q2 offers all
+  three identities with trade-offs — and the measured-best one is the proposed answer, not a threat
+  to defend against; Phase 1 is shaped so the table can be seeded from global lists later without
+  touching the pen.
+- **Renderer pen cache ignores the identity.** `isSameAs()`/`operator==` compare `m_lineType` first
+  and then the pen's **fold id** as one integer compare (Phase 1, §4 step 4) — never a
+  `Qt::CaseInsensitive` compare, never an allocation; pixel test with two custom types back to back
+  (Phase 2, T-R2).
 - **Renderer or view outlives — or predeceases — its document.** The failure is a dangling table
   pointer, or a pattern cache left stale by a table edit (`qc_mdiwindow.cpp` · `~QC_MDIWindow` frees
   the document before its child view and renderer, the #2764 class of bug).
@@ -1951,38 +2844,165 @@ The long mitigations in full, keyed by the risk wording of the table:
     drops it at the start of `render()`/`setupPainter()` when `m_graphic` is null, differs, or the
     revision moved (the `getBackgroundColor()` null-guard shape) — which also covers a `clear()`
     that never notifies (`rs_layerlist.cpp` · `RS_LayerList::clear`); a renderer-less painter
-    degrades to the static enum table, per T-R4.
+    degrades to the static enum table, per T-R4. The **id** itself can never dangle — the intern
+    table is append-only and process-wide (§4 step 4) — so what the revision counter protects is the
+    table **row** a fold id resolves to, not the handle.
 - **Any pen edit through the enum-only combo before Phase 3.** PR-1 and PR-2 state it under "Known
   and accepted" and a test proves open+save without UI keeps names; the Phase 3 list-driven combo
   with the temporary row removes it.
-  - Not "No Pen": option A never yields −1, because every enum `RS_FilterDXFRW::nameToLineType`
-    returns — down to its `SolidLine` fallback — has a row in `QG_LineTypeBox::init`; the −1 path
-    needs an enum with no row, `NoPen` today (cf. §0.4).
-- **Render-loop cost of a `QString` in `RS_Pen`.** Where the cost sits: copied per entity per frame
-  (`rs_entity.cpp` · `RS_Entity::getPenResolved` returns by value; `lc_graphicviewrenderer.cpp` ·
-  `LC_GraphicViewRenderer::setPenForEntity` copies it again into `originalPen` and calls
-  `updateBy`) and compared in the #1922 pen cache (`rs_pen.h` · `RS_Pen::isSameAs`);
-  `RS_Color::m_colorName` is the precedent, but it is outside equality and outside rendering.
-  - The member stays a null `QString` for every built-in enum (`getLineTypeName()` returns
-    `lineTypeToName(enum)` when null), so ordinary pens copy a null `d` pointer with no refcount
-    traffic.
-  - `operator==`/`isSameAs` test enum, width and colour first and reach the names only when the
-    enums match and at least one is non-null, then compare with exact `QString::operator==`
-    (size + memcmp) on the already-folded spelling — never `Qt::CaseInsensitive` per entity.
-  - Built-in names come from static `QStringLiteral`s in `LC_LineTypeNames` (today `lineTypeToName`
-    builds a fresh `QString` from a `const char*` on every call), so `setLineType(enum)` never
-    allocates; the filters hand the pen the table entry's own `QString`, so one shared buffer per
-    spelling.
-  - PR-1 reports `getPenTime`/`setPenTime`/`painterSetPenTime` base vs fix on a generated
-    ~100k-entity drawing (drop the underscore in `#define DEBUG_RENDERING_`,
-    `lib/gui/render/lc_graphicviewportrenderer.h`), target ≤ 5 %.
+  - Not "No Pen": the identity never yields −1, because every enum `nameToLineType` returns — down
+    to its `SolidLine` fallback — has a row in `QG_LineTypeBox::init`; the −1 path needs an enum
+    with no row, `NoPen` today (cf. §0.4).
+- **Render-loop cost of the identity in `RS_Pen`.** Where the cost sits: the pen is copied per
+  entity per frame (`rs_entity.cpp` · `RS_Entity::getPenResolved` returns by value; four of the six
+  pen-preparation sites copy it again into `originalPen`, §0.3) and compared in the #1922 pen cache
+  (`rs_pen.h` · `RS_Pen::isSameAs`). Four real builds of `RS_Pen` were patched, fully rebuilt and
+  benchmarked with `tools/lc_render_bench.py --procs 9 --reps 5` before this was decided (render
+  study §3.3, §6.1). The spike's labels are **not** §2 Q2's option letters; the mapping, once:
+  **spike A = Q2 option A**, **spike A2 = option A with the spellings interned = fallback (a′)**,
+  **spike B = Q2 option C (chosen)**, **spike C = Q2 option A plus the Phase-2 per-entity lookup**.
+
+  | Measure | baseline | spike **A** = Q2 A | spike **A2** = (a′) | spike **B** = Q2 C | spike **C** = Q2 A + lookup |
+  |---|---:|---:|---:|---:|---:|
+  | `sizeof(RS_Pen)` | 104 | 128 | 128 | **104** | 128 |
+  | Fit rows, median Δ (9 rows) | — | +2.1 % | +3.1 % | **+0.5 %** | +3.2 % |
+  | Fit rows, Δ range | ±1.8 % (noise floor) | −0.2…+3.9 % | +0.7…+3.7 % | **−2.4…+1.3 %** | +1.6…+4.9 % |
+  | Worst row (`200000/mixed/zoom40`) | 10.819 ms | 19.904 ms (**+84.0 %**, reproduced) | 9.468 ms (−12.5 %) | **10.566 ms (−2.3 %)** | 20.111 ms (+85.9 %) |
+  | Peak RSS @200k | 138.6 MB | 150.1 MB (+8.3 %) | 141.8 MB (+2.3 %) | **139.6 MB (+0.7 %)** | 150.1 MB (+8.3 %) |
+  | DXF import @200k | 568.4 ms | 614.8 ms (+8.2 %) | 585.3 ms (+3.0 %) | **573.9 ms (+1.0 %)** | 607.9 ms (+7.0 %) |
+  | Pen-call counts (`LD_PRELOAD`) | reference | identical | identical | identical | identical |
+
+  - **Why the id and not the string.** The A column is the version of this plan that was written
+    before anything was measured, and its +84 % row is **one heap allocation per pen at import**,
+    not the comparison: A2 has the same `sizeof`, the same semantics and the same name inside every
+    comparison, and the pathological row disappears. The id removes the allocation *and* the copy:
+    `uint16 ==` ≈ **0.23 ns** against `QString ==` 2.1–2.8 ns, a non-empty `QString` copy+destroy
+    8.013 ns (two atomic refcounts that a renderer with no threads cannot use) against 0 for an
+    integer, and `QString::compare(Qt::CaseInsensitive)` **39.7 ns** — which is why no comparator on
+    a per-entity path may use it (§6 steps 5 and 7).
+  - **Why the A and A2 columns stay in this table.** They are the argument for C, not history: A is
+    the one configuration the measurements reject, A2 is the documented fallback, and C's claim is
+    only credible next to them. The pen counts being byte-identical to baseline for all four
+    variants on all 18 configs is what proves each patch changed the *cost* of the pen cache and
+    never its hit rate.
+  - **The honest costs of the chosen option**, so nobody is surprised later: 65 535 spellings per
+    process with the overflow policy of §4 step 4; main-thread-only interning; one hash per entity
+    at import (+1.0 % measured), never per frame; and a pen inspected in a debugger no longer shows
+    its name. The headline is "no measurable cost" (+0.5 % against a ±1.8 % floor), not "zero cost".
+  - **The acceptance gate is `tools/lc_render_bench.py`, not the `DEBUG_RENDERING` counters.**
+    PR-1 and PR-2 each run it with `--procs ≥ 9 --reps 5 --pen-counts` against the recorded baseline
+    (`test-results/named-linetypes/render_baseline/runA.summary.json`) and report:
+    **`fit` rows only, gated at ±3 %** (measured same-build noise floor ±1.8 %); `zoom40` rows
+    **reported but never gated below ±25 %** (same-build max |Δ| 24.8 %, per-process medians
+    bimodal); fixtures must include an **all-custom-name** variant, because a generated drawing is
+    built-in-only, i.e. the id-0 fast path that this feature does not use; `LD_PRELOAD` pen counts
+    **byte-identical to baseline** as a cache-behaviour invariant (a broken cache shows 200 000
+    `setPen` calls where baseline shows 1); and PR-1 additionally asserts `sizeof(RS_Pen) == 104`.
+    The ≤ 5 % `getPenTime`/`setPenTime`/`painterSetPenTime` gate this plan used to name is
+    **withdrawn**: verified, `getPenTimer` wraps only `getPenResolved()`, the `originalPen` copy
+    sits between the timers, and the `isSameAs` probe with its early `return` precedes
+    `setPenTimer.start()` entirely — the two sites that touch the new field most are outside all
+    three counters and the whole cache-hit path is untimed, so a regression could pass ≤ 5 % while
+    costing milliseconds per frame.
+  - **Buffer sharing is a contract of the fallback, not a PR-1 deliverable.** If maintainers refuse
+    an integer in `RS_Pen` and §2 Q2's fallback (a′) is taken, PR-1 owes a test that two entities
+    with the same spelling share one `QString` buffer (compare `QString` data pointers): the
+    sharing is what separates +3.1 % from the +84 % row, `rs_filterdxfrw.cpp` ·
+    `setEntityAttributes` builds a fresh `QString` per entity today (as it does for layer and colour
+    names), and the failure is invisible because behaviour stays correct. Under option C there is
+    nothing to share and the guard is the `sizeof` assertion plus pen-count parity above.
+- **Pre-existing: one dashed entity defeats the #1922 pen cache.** Not ours, measured, and worth
+  more than this feature costs: `RS_Pen::isSameAs` compares `m_dashOffset` with the painter's
+  running offset, which `RS_Painter::updateDashOffset` decrements per drawn entity, so 300 dashed
+  lines cost 300 `RS_Painter::setPen` calls where 300 solid lines cost **1**, and 2000 entities with
+  a single dashed line first cost 2000. PR-0b fixes the term and hoists the `originalPen` copy below
+  the early return (§10, §0.3); PR-2 then owes the forward obligation that the predicate follows the
+  **resolved pattern**, not the cached enum (§5 step 2).
+- **Pre-existing: `RS_Painter::setPen` rebuilds the dashed `QPen` unconditionally.** The
+  `Qt::CustomDashLine` branch returns before the `bool changed` block the solid branch uses: one
+  `QPen` construction and one `setDashPattern` heap `QVector` per entity per frame — 200 000 for
+  200 000 dashed entities — at 152.0 ns/call against the solid branch's 12.8 ns compare. PR-0a gives
+  it the same change detection (§10). Both rows get worse in exact proportion to how many entities
+  carry a non-solid linetype, which is precisely what this feature increases; fixing them first is
+  also the most credible thing this ladder can offer the owner of #1922.
+- **Intern table exhausted or churned by the UI.** The table is append-only and never freed, so
+  every spelling ever accepted costs one slot of 65 535 for the life of the process. Two rules keep
+  that out of reach: Phases 3 and 4 intern **only on commit** — when a spelling is accepted into a
+  pen or a record — never on a keystroke, a preview, a temporary combo row or a name `isValidName`
+  refuses (§6 step 1, §7 step 1); and the palette, the temporary row and every snapshot hold
+  **names**, never ids (§0.4, §2), so nothing can mint an id merely by being displayed. On overflow
+  the intern call returns **id 0**: the pen reports its enum's canonical name, exactly like a pen
+  that never carried an identity, and the event is reported once through `RS_DEBUG` — it never
+  throws, never evicts and never reuses an id (§4 step 4).
+- **Interning is not thread-safe.** Verified repo-wide today — QtConcurrent, `std::thread`,
+  `QThreadPool`, `QFuture`, `std::async`, `QRunnable`, `std::execution` and omp match only Catch2
+  and muparser — which is also why the `QString` form's refcount atomics buy a guarantee this
+  renderer never uses. This plan turns the observation into an invariant stated in `rs_pen.h`'s
+  documentation and in `lc_linetypeintern.h`: any future worker thread that builds pens interns on
+  the main thread or guards the table.
+- **UI: PR-3 is the widest PR in the ladder and the least measured.** Milliseconds are not the risk
+  — measured at a 6× stress size (337 rows): 0.57 ms to build a combo, 0.43 ms to rebuild it,
+  1.44 ms to paint 300 runtime icons, 2.94 ms for a document-switch rebuild of the two persistent
+  combos, 7.25 µs for `findData` with the plan's custom `QVariant`. The risk is behaviour and
+  ownership, and §6 step 1 carries the decisions: the icon cache is today
+  `LC_PenInfoRegistry`'s `QMap<RS2::LineType, QIcon>` in an app-wide singleton, keyed on the enum
+  alone — no colour, size or `devicePixelRatio`, no document hook, no eviction, and nothing
+  invalidates it when `QC_ApplicationWindow::fireIconsRefresh()` emits `iconsRefreshed()` (verified),
+  the path every built-in `.lci` icon follows for theme and screen changes; the linetype combos call
+  no `setIconSize` (verified), so 32×12 icons are shown at Qt's default 16 px; `QG_ColorBox`'s
+  temporary-row precedent removes its stale row by **constant-text match**, which a name-bearing row
+  cannot reuse; there is no sort or search rule for 300 rows and no width bound while `isValidName`
+  permits 255 characters (measured 1843 px of toolbar for one such row, hence §7 step 1's display
+  cap); the list mixes translated built-in labels with verbatim ASCII names; and the 66 `.ts` files
+  need a named `lupdate` owner before PR-3, with PR-4's dialog otherwise shipping untranslated in
+  all 66 locales.
+- **Dimension pens re-intern a spelling per child per rebuild.** Verified:
+  `RS_Dimension::getPenDimensionLine()` / `getPenExtensionLine()` build the pen from the enum cache
+  and are called from `createHorizontalTextDimensionLine`, `createAlignedTextDimensionLine`,
+  `addDimExtensionLine` and `addDimArc` — per dimension rebuild, not once — so setting the name from
+  the raw string there would hash a spelling per dimension child per rebuild. The transient dim
+  style caches the interned id beside the raw name and the pen takes it through an id-taking setter
+  (§8 step 2). The fix stays the cheapest visible win of the ladder; it just must not be written as
+  a per-child string hash.
+- **Integer persistence breaks.** The enum is never renumbered and no id is ever persisted (§4
+  step 4 (iv)). The palette is **versioned as a new file** rather than growing a 5th field the
+  current parser deletes rows over, with the migration, escaping and field-naming rules stated once
+  in §0.4; `$DIMLTYPE` and `.lcds` stop carrying a raw enum int (§0.4, §8 step 2); `QSettings` pens
+  and the plugin API keep the enum, and PR-0a makes a stale integer from any of them paint solid
+  instead of crashing.
 
 ## 12. Explicit Non-Goals
 
 - Rendering shapes/text of complex linetypes; `.shx` support.
-- `$PSLTSCALE` / paper-space scaling; continuous pattern across polyline vertices (PLINEGEN).
+- `$PSLTSCALE` / paper-space scaling — moot for LibreCAD output for a reason worth stating rather
+  than a decision we took: the filter never reads `DRW_Entity::space` on import and never sets it on
+  export, so paper-space entities are flattened into model space (§0.4).
+- Dash phase continued across entity boundaries, and `PLINEGEN` itself. What PR-2 buys is smaller
+  and must not be over-read: `drawEntityPolyline` stops emitting `moveTo` for a child that starts
+  where the path currently ends, so **one** polyline behaves one way instead of two (straight
+  children restarting the phase at every vertex, arc children continuing it inside the same
+  subpath). It does not make the phase continue from a polyline into the next entity — circles,
+  ellipses, small arcs, hatches and polylines never call `updateDashOffset` (§5 step 3) — and it
+  does not carry the `PLINEGEN` flag: bit 128 is parsed by libdxfrw, read by `addLWPolyline` only as
+  `flags & 0x1`, and written back as 0 (§0.4).
 - Backport to 2.2.1.
 - Any vendor/machine-specific name or rule in upstream code (vendor files are local acceptance
   fixtures only).
-- Undo for linetype table edits (matches layers today).
+- Undo for linetype table edits (matches layers today) — **with the inconsistency stated, not
+  hidden**: the table edit is not undoable while the entity pen rewrites it triggers *are*, so one
+  Undo after "rename or delete a linetype and rewrite the entities that used it" leaves entities
+  naming a record that no longer exists. The Q5 marker rule bounds that to a render fallback — the
+  pen keeps its name, the entity draws with the static pattern of its cached enum, and the save
+  re-synthesises a marker record — and Phase 4, the phase that first lets a user edit the table,
+  carries the case that pins it: rename a record, let the pen rewrite run, undo once, and assert
+  that the pen still reports its name, that the drawing still renders, and that the saved file still
+  carries the name. Making table edits undoable is later work, and it is not in this ladder.
 - Changing the on-screen look of the existing built-in families.
+- **The interned id as anything but an in-process handle.** It is never persisted (§4 step 4 (iv)),
+  never reclaimed or reused, and never document-scoped — which is exactly what rules out the two
+  cheaper encodings: a pointer to a table entry, or an index into a *document's* table. Both dangle
+  where this feature actually lives — `RS_Clipboard`'s singleton graphic keeps clones the user can
+  outlive by closing the source document, and `LC_ActionBlockLibraryInsert::reset()` runs
+  `delete m_actionData->prev` on the very graphic the inserted entities came from (verified). No
+  API accepts an id from outside the process, and no file, template, palette, settings key or plugin
+  ever sees one.
