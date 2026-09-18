@@ -138,3 +138,47 @@ TEST_CASE("LC_ViewList::find + getIndex: NFC view matches NFD lookup",
     REQUIRE(list.find(nfd) != nullptr);
     REQUIRE(list.getIndex(nfd) == 0);
 }
+
+#ifdef LC_NAMED_LINETYPES
+// ---------------------------------------------------------------------------
+// Named linetypes (#1738), Phase-0 red test T13: NFC/NFD lookup on the
+// document linetype table.
+//
+// Linetype names are keyed by NFC normalisation followed by an ASCII-only
+// upper-case fold, so a decomposed lookup must reach a composed entry exactly
+// as it does for layers, blocks, dim styles and views above - and, unlike
+// layers, the match folds case as well, because DXF resolves LTYPE references
+// without regard to case.
+//
+// Guarded: LC_LineTypeList arrives with Phase 1, which defines the macro.
+// ---------------------------------------------------------------------------
+
+#include "lc_linetype.h"
+#include "lc_linetypelist.h"
+
+TEST_CASE("LC_LineTypeList::find: NFC linetype matches NFD lookup",
+          "[i18n][nfc][linetypes][linetype][named]") {
+    LC_LineTypeList list;
+    // Insert a linetype name in composed (NFC) form: "Ölfarbe" with U+00D6.
+    const QString nfc = QString::fromUtf8("\xC3\x96" "lfarbe");
+    list.add(new LC_LineType(nfc));
+    // Look it up in decomposed (NFD) form: 'O' + COMBINING DIAERESIS.
+    QString nfd;
+    nfd.append(QChar('O'));
+    nfd.append(QChar(0x0308)); // COMBINING DIAERESIS
+    nfd.append(QStringLiteral("lfarbe"));
+    REQUIRE(nfc != nfd); // byte-different
+    REQUIRE(list.find(nfd) != nullptr);
+    // Case-insensitive and NFC together: the upper-cased decomposed spelling
+    // still reaches the composed entry, because the fold leaves U+0308 alone
+    // and NFC composes it onto the 'O'.
+    REQUIRE(list.find(nfd.toUpper()) != nullptr);
+    // Deliberately NOT asserted: the lower-case spelling the shared helper
+    // builds ('o' + U+0308 -> "olfarbe" with U+00F6).  An ASCII-only fold
+    // cannot map U+00F6 onto the stored U+00D6, so that lookup misses - by
+    // design, not by defect.  Folding it would need a Unicode upper-case,
+    // which normalizeDwgTableName (rs_filterdxfrw.cpp:136-142) does not do,
+    // and the table would then merge two names the DWG writer keeps apart.
+    // The plan states the same rule in section 4 step 1 and in its T13 bullet.
+}
+#endif // LC_NAMED_LINETYPES
