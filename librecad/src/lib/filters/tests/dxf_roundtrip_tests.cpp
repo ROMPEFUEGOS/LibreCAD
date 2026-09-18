@@ -6487,8 +6487,12 @@ TEST_CASE("Every DXF linetype name LibreCAD writes maps back to the same RS2::Li
   CHECK(static_cast<int>(RS2::PhantomLine) == 32);
   CHECK(static_cast<int>(RS2::PhantomLineX2) == 35);
 
-  // Every drawable type must have a screen pattern: RS_Painter dereferences
-  // getPattern() without a null check.
+  // Every drawable type must have a screen pattern.  RS_Painter no longer
+  // dereferences getPattern() blindly: rsToQDashPattern() null-checks it and
+  // returns an empty pattern, which makes the caller fall back to a solid pen
+  // (rs_painter.cpp:104-110, the guard added by #2852).  A drawable built-in
+  // with no table entry is still a bug - it would draw solid with no
+  // diagnostic at all - so the loop stays.
   for (const RS2::LineType type : {RS2::HiddenLine, RS2::HiddenLineTiny,
                                    RS2::HiddenLine2, RS2::HiddenLineX2,
                                    RS2::PhantomLine, RS2::PhantomLineTiny,
@@ -8175,3 +8179,309 @@ TEST_CASE("Blanks around a linetype name string add no second record",
 
   std::filesystem::remove(out);
 }
+
+// ===========================================================================
+// Named linetypes (#1738) - FORK-ONLY WIP, never for upstream.
+//
+// The phase-0 red cases that rung 2a did not take.  LC_NAMED_LINETYPES is
+// defined by nothing, so this block never compiles; each later rung takes the
+// cases it turns green out of it (SPEC_PR2_linetype_roundtrip.md section 9).
+//
+//   T3(e)  F2 only, which is outside the ladder (Open 14).  With F2 dropped,
+//          Open 14 (a) deletes it; kept here until the owner says so.
+//   T4     2c: twin spellings need the file order only a table keeps.
+//   T9     F1 (export half) and 2c (table half).
+//   T12    D1.  As written it cannot pass: it exports fixture (b) with
+//          FormatDXFRW (AC1021), and fixture (b) does not export above R2000
+//          even without 2a (pr2/2a/probe2_export_failures.txt).  D1 uses a
+//          fixture of its own (SPEC_PR2 section 4).
+//
+// The parts 2a stripped from the cases it took (every findLineType /
+// countLineTypes assertion of T1, T2, T3, T3(d), T13, T14, T16 and T17, T13's
+// R12 tail, and T8's R12 half, which needs F2) are in the original phase-0
+// block at archive/pr2-wip-red-ac615dc1f (= ac615dc1f), whose line numbers
+// SPEC_PR2 section 5.9 cites.  T6 was deleted as a duplicate of
+// rs_pen_tests.cpp (19 -> 18).  The fixtures and helpers the cases below use
+// now live, unguarded, in the "Linetype names" block above, except fixture (c)
+// (kNamedAppDataFixture) and fileBytes, which stay in this block.
+//
+// T13's NFD/NFC find() case lives in i18n_caret_nfc_tests.cpp and T15 in
+// shp_import_filter_tests.cpp, both still guarded.
+// ===========================================================================
+#ifdef LC_NAMED_LINETYPES
+
+#include "lc_linetype.h"
+
+namespace {
+
+// Fixture (c) - AC1015 record carrying ACAD_REACTORS application data.
+const char *const kNamedAppDataFixture =
+    "0\nSECTION\n2\nHEADER\n9\n$ACADVER\n1\nAC1015\n0\nENDSEC\n"
+    "0\nSECTION\n2\nTABLES\n"
+    "0\nTABLE\n2\nLTYPE\n5\n5\n330\n0\n100\nAcDbSymbolTable\n70\n1\n"
+    "0\nLTYPE\n5\n40\n330\n5\n"
+    "100\nAcDbSymbolTableRecord\n100\nAcDbLinetypeTableRecord\n"
+    "2\nVENDOR_APP\n70\n0\n3\nVendor with app data\n72\n65\n73\n2\n40\n40.0\n"
+    "49\n20.0\n74\n0\n49\n-20.0\n74\n0\n"
+    "102\n{ACAD_REACTORS\n330\nA1\n102\n}\n"
+    "0\nENDTAB\n"
+    "0\nTABLE\n2\nLAYER\n5\n2\n330\n0\n100\nAcDbSymbolTable\n70\n1\n"
+    "0\nLAYER\n5\n50\n330\n2\n"
+    "100\nAcDbSymbolTableRecord\n100\nAcDbLayerTableRecord\n"
+    "2\n0\n70\n0\n62\n7\n6\nCONTINUOUS\n"
+    "0\nENDTAB\n0\nENDSEC\n"
+    "0\nSECTION\n2\nENTITIES\n"
+    "0\nLINE\n5\n100\n330\n1F\n100\nAcDbEntity\n8\n0\n6\nVENDOR_APP\n"
+    "100\nAcDbLine\n10\n0.0\n20\n0.0\n11\n10.0\n21\n0.0\n"
+    "0\nENDSEC\n0\nEOF\n";
+
+std::string fileBytes(const std::string &path) {
+  std::ifstream in(path, std::ios::binary);
+  std::ostringstream buffer;
+  buffer << in.rdbuf();
+  return buffer.str();
+}
+
+} // namespace
+
+// T3 (e) ---------------------------------------------------------------------
+TEST_CASE("DXF R12 export falls back to a dash-only record for app data",
+          "[dxf][roundtrip][filter][linetype][named]") {
+  ensureSettings();
+  const std::string src =
+      writeFixture("named_t3e_src.dxf", kNamedAppDataFixture);
+  const std::string out12 = tmpFile("named_t3e_out12.dxf");
+  std::filesystem::remove(out12);
+
+  RS_Graphic graphic;
+  {
+    RS_FilterDXFRW filter;
+    REQUIRE(filter.fileImport(graphic, QString::fromStdString(src),
+                              RS2::FormatDXFRW));
+  }
+  // dxfRW::writeTableEntryAppData fails the WHOLE write below AC1014, so the
+  // archived record cannot be re-emitted verbatim here: the export must still
+  // succeed, with the table's own dash-only record.
+  {
+    RS_FilterDXFRW filter;
+    REQUIRE(filter.fileExport(graphic, QString::fromStdString(out12),
+                              RS2::FormatDXFRW12));
+  }
+  CHECK(ltypeRecordGroupValues(out12, "VENDOR_APP", "73") ==
+        std::vector<std::string>{"2"});
+  CHECK(ltypeRecordGroupValues(out12, "VENDOR_APP", "102").empty());
+  CHECK(ltypeRecordGroupValues(out12, "VENDOR_APP", "330").empty());
+  CHECK(countValues(recordGroupValues(out12, "LINE", "6"), "VENDOR_APP") == 1);
+
+  std::filesystem::remove(src);
+  std::filesystem::remove(out12);
+}
+
+// T4 -------------------------------------------------------------------------
+TEST_CASE("DXF case-insensitive linetype names fold to one entry and one record",
+          "[dxf][roundtrip][filter][linetype][named]") {
+  ensureSettings();
+  const std::string src = writeFixture("named_t4_src.dxf", kNamedR12Fixture);
+  const std::string out = tmpFile("named_t4_out.dxf");
+  const std::string out12 = tmpFile("named_t4_out12.dxf");
+  const std::string out12b = tmpFile("named_t4_out12b.dxf");
+  std::filesystem::remove(out);
+  std::filesystem::remove(out12);
+  std::filesystem::remove(out12b);
+
+  RS_Graphic graphic;
+  {
+    RS_FilterDXFRW filter;
+    REQUIRE(filter.fileImport(graphic, QString::fromStdString(src),
+                              RS2::FormatDXFRW));
+  }
+
+  // Record, layer and entity spell the name three ways; all resolve to one
+  // entry.  The fixture also carries a second record VENDOR_MIXEDCASE
+  // [30,-30]: it is dropped and the FIRST record's pattern survives
+  // (first record wins, plan section 11).
+  const LC_LineType *entry =
+      graphic.findLineType(QStringLiteral("Vendor_mixedCase"));
+  REQUIRE(entry != nullptr);
+  CHECK(graphic.findLineType(QStringLiteral("VENDOR_MIXEDCASE")) == entry);
+  CHECK(graphic.findLineType(QStringLiteral("vendor_mixedcase")) == entry);
+  REQUIRE(entry->pattern.size() == 2);
+  CHECK(entry->pattern[0] == Catch::Approx(20.0));
+  CHECK(entry->pattern[1] == Catch::Approx(-20.0));
+
+  // The two-level rule of plan section 4 step 4, pinned here: two interned
+  // spellings are two ids and one fold id.  Each pen reports and writes its
+  // OWN spelling, and the pens still compare equal, because equality compares
+  // the fold id and never the characters (step 4 (iii)).  Asserted through
+  // RS_Pen::operator== rather than through the intern unit, so the case does
+  // not pin an API shape Phase 1 has not settled yet - and asserted on the
+  // fold, never on the raw id, which a DWG re-import legitimately changes.
+  RS_Pen mixedPen;
+  mixedPen.setLineTypeName(QStringLiteral("Vendor_mixedCase"));
+  RS_Pen upperPen;
+  upperPen.setLineTypeName(QStringLiteral("VENDOR_MIXEDCASE"));
+  CHECK(mixedPen.getLineTypeId() != 0);
+  CHECK(upperPen.getLineTypeId() != 0);
+  CHECK(mixedPen.getLineTypeId() != upperPen.getLineTypeId());
+  CHECK(mixedPen.getLineTypeName() == QStringLiteral("Vendor_mixedCase"));
+  CHECK(upperPen.getLineTypeName() == QStringLiteral("VENDOR_MIXEDCASE"));
+  CHECK(mixedPen == upperPen);
+
+  // The imported entity carries an identity too, and it is its own spelling.
+  RS_Entity *mixedLine = entityOnLayer(graphic, QStringLiteral("L_MIXED"));
+  REQUIRE(mixedLine != nullptr);
+  CHECK(mixedLine->getPen(false).getLineTypeName() ==
+        QStringLiteral("VENDOR_MIXEDCASE"));
+  CHECK(mixedLine->getPen(false).getLineTypeId() != 0);
+
+  {
+    RS_FilterDXFRW filter;
+    REQUIRE(filter.fileExport(graphic, QString::fromStdString(out),
+                              RS2::FormatDXFRW));
+  }
+  // AC1021: the record keeps the first spelling, the entity keeps its own.
+  CHECK(ltypeRecordGroupValues(out, "Vendor_mixedCase", "73") ==
+        std::vector<std::string>{"2"});
+  CHECK(ltypeRecordGroupValues(out, "VENDOR_MIXEDCASE", "73").empty());
+  CHECK(countValues(recordGroupValues(out, "LINE", "6"), "VENDOR_MIXEDCASE") ==
+        1);
+
+  {
+    RS_FilterDXFRW filter;
+    REQUIRE(filter.fileExport(graphic, QString::fromStdString(out12),
+                              RS2::FormatDXFRW12));
+  }
+  // R12: dxfWriter::writeUtf8Caps upper-cases every name on the way out, so
+  // record, layer and entity all read VENDOR_MIXEDCASE - and the helper is
+  // case-sensitive, so the mixed spelling must not be found.
+  CHECK(ltypeRecordGroupValues(out12, "VENDOR_MIXEDCASE", "73") ==
+        std::vector<std::string>{"2"});
+  CHECK(ltypeRecordGroupValues(out12, "Vendor_mixedCase", "49").empty());
+  CHECK(namedRecordGroupValues(out12, "LAYER", "L_MIXED", "6") ==
+        std::vector<std::string>{"VENDOR_MIXEDCASE"});
+  CHECK(countValues(recordGroupValues(out12, "LINE", "6"),
+                    "VENDOR_MIXEDCASE") == 1);
+  CHECK(recordGroupValues(out12, "LTYPE", "5").empty());
+
+  RS_Graphic reimported;
+  {
+    RS_FilterDXFRW filter;
+    REQUIRE(filter.fileImport(reimported, QString::fromStdString(out12),
+                              RS2::FormatDXFRW));
+  }
+  CHECK(reimported.findLineType(QStringLiteral("vendor_mixedcase")) != nullptr);
+  CHECK(reimported.countLineTypes() == graphic.countLineTypes());
+
+  // A second export of the same document is byte-identical: nothing in the
+  // LTYPE path is order- or clock-dependent ($TDCREATE/$TDUPDATE come from the
+  // header variables, not from the wall clock).
+  {
+    RS_FilterDXFRW filter;
+    REQUIRE(filter.fileExport(graphic, QString::fromStdString(out12b),
+                              RS2::FormatDXFRW12));
+  }
+  CHECK(fileBytes(out12b) == fileBytes(out12));
+
+  std::filesystem::remove(src);
+  std::filesystem::remove(out);
+  std::filesystem::remove(out12);
+  std::filesystem::remove(out12b);
+}
+
+// T9 -------------------------------------------------------------------------
+TEST_CASE("DXF built-in redefined by the file renders seeded but writes the "
+          "file's own metrics",
+          "[dxf][roundtrip][filter][linetype][named]") {
+  ensureSettings();
+  const std::string src = writeFixture("named_t9_src.dxf", kNamedR12Fixture);
+  const std::string out = tmpFile("named_t9_out.dxf");
+  std::filesystem::remove(out);
+
+  RS_Graphic graphic;
+  {
+    RS_FilterDXFRW filter;
+    REQUIRE(filter.fileImport(graphic, QString::fromStdString(src),
+                              RS2::FormatDXFRW));
+  }
+
+  // The seeded look of a built-in is fixed (group 49 is drawing units x
+  // $LTSCALE, not device mm), so the file's metrics do not drive the dashes -
+  // the entry keeps the seeded pattern and only records that a file record
+  // exists for it.
+  const LC_LineType *hidden = graphic.findLineType(QStringLiteral("HIDDEN"));
+  REQUIRE(hidden != nullptr);
+  REQUIRE(hidden->pattern.size() == 2);
+  CHECK(hidden->pattern[0] == Catch::Approx(6.35));
+  CHECK(hidden->pattern[1] == Catch::Approx(-3.175));
+  CHECK(hidden->builtin);
+  CHECK(hidden->hasImportedRecord);
+
+  {
+    RS_FilterDXFRW filter;
+    REQUIRE(filter.fileExport(graphic, QString::fromStdString(out),
+                              RS2::FormatDXFRW));
+  }
+  // On write the archived record still wins, exactly as today, and once only.
+  CHECK(ltypeRecordGroupValues(out, "HIDDEN", "73") ==
+        std::vector<std::string>{"2"});
+  const auto hiddenDashes = ltypeRecordGroupValues(out, "HIDDEN", "49");
+  REQUIRE(hiddenDashes.size() == 2);
+  CHECK(std::stod(hiddenDashes[0]) == Catch::Approx(64.0));
+  CHECK(std::stod(hiddenDashes[1]) == Catch::Approx(-32.0));
+
+  // A name-only record (the shipped template's shape) carries no metrics, so
+  // it must NOT mask the built-in: today this writes 73 = 0, a deliberate fix
+  // stated in the PR description.
+  CHECK(ltypeRecordGroupValues(out, "DASHED", "73") ==
+        std::vector<std::string>{"2"});
+  const auto dashedDashes = ltypeRecordGroupValues(out, "DASHED", "49");
+  REQUIRE(dashedDashes.size() == 2);
+  CHECK(std::stod(dashedDashes[0]) == Catch::Approx(12.7));
+  CHECK(std::stod(dashedDashes[1]) == Catch::Approx(-6.35));
+
+  std::filesystem::remove(src);
+  std::filesystem::remove(out);
+}
+
+// T12 ------------------------------------------------------------------------
+TEST_CASE("DXF DIMSTYLE linetype reference resolves back to the named linetype",
+          "[dxf][roundtrip][filter][linetype][named][dimstyle]") {
+  ensureSettings();
+  const std::string src = writeFixture("named_t12_src.dxf", kNamedR2000Fixture);
+  const std::string out = tmpFile("named_t12_out.dxf");
+  std::filesystem::remove(out);
+
+  RS_Graphic graphic;
+  {
+    RS_FilterDXFRW filter;
+    REQUIRE(filter.fileImport(graphic, QString::fromStdString(src),
+                              RS2::FormatDXFRW));
+  }
+  {
+    RS_FilterDXFRW filter;
+    REQUIRE(filter.fileExport(graphic, QString::fromStdString(out),
+                              RS2::FormatDXFRW));
+  }
+  // 345 is written for DXF above AC1018 only, which FormatDXFRW (AC1021) is.
+  CHECK(!recordGroupValues(out, "DIMSTYLE", "345").empty());
+
+  RS_Graphic reimported;
+  {
+    RS_FilterDXFRW filter;
+    REQUIRE(filter.fileImport(reimported, QString::fromStdString(out),
+                              RS2::FormatDXFRW));
+  }
+  LC_DimStyle *style =
+      reimported.getDimStyleByName(QStringLiteral("VENDOR_DIM"));
+  REQUIRE(style != nullptr);
+  REQUIRE(style->dimensionLine() != nullptr);
+  CHECK(style->dimensionLine()->lineTypeName() == QStringLiteral("VENDOR_TAB"));
+
+  // The DWG branch stays a documented gap: findLineTypeHandleToWrite() returns
+  // NoHandle whenever m_dxfW == nullptr, so no DWG assertion belongs here.
+
+  std::filesystem::remove(src);
+  std::filesystem::remove(out);
+}
+
+#endif // LC_NAMED_LINETYPES
