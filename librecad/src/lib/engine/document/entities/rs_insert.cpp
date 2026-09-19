@@ -258,7 +258,7 @@ RS_Pen updatePen(RS_Pen pen, const RS_Pen& blockPen) {
 
     // line type from block (free floating):
     if (pen.getLineType() == RS2::LineByBlock) {
-        pen.setLineType(blockPen.getLineType());
+        pen.setLineTypeFromPen(blockPen);
     }
 
     return pen;
