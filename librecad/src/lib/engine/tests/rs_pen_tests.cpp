@@ -290,9 +290,9 @@ TEST_CASE("identity survives every pen-to-pen copy", "[pen][linetype]") {
 }
 
 TEST_CASE("setLineType(enum) clears the name", "[pen][linetype]") {
-    // Two sites depend on it: rs_modification.cpp:264, where a user's retype
-    // must survive the next save, and lc_graphicviewrenderer.cpp:609, where the
-    // forced selection pen reaches painter->setPen() at :642.
+    // A user's explicit retype, as in the property sheet or the pen widget,
+    // must survive the next save, and the renderer's forced selection pen must
+    // not keep the name.
     RS_Pen pen = namedPen(QStringLiteral("VENDOR_TAB"));
     REQUIRE(pen.hasLineTypeName());
     pen.setLineType(RS2::DashLine);

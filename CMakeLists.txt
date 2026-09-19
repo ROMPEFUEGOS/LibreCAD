@@ -2498,6 +2498,7 @@ if (BUILD_TESTS)
         librecad/src/lib/printing/tests/lc_printingtests.cpp
         librecad/src/lib/modification/tests/lc_division_tests.cpp
         librecad/src/lib/modification/tests/rs_modification_trim_tests.cpp
+        librecad/src/lib/modification/tests/rs_modification_attributes_tests.cpp
         librecad/src/lib/filters/tests/dwg_buffer_round_trip_tests.cpp
         librecad/src/lib/creation/tests/lc_action_draw_line_parallel_tests.cpp
         librecad/src/lib/creation/tests/lc_action_draw_fast_tests.cpp
@@ -2573,6 +2574,8 @@ if (BUILD_TESTS)
         librecad/src/lib/gui/tests/rs_painter_tests.cpp
         librecad/src/actions/drawing/draw/dimensions/tests/rs_actiondimleader_tests.cpp
         librecad/src/ui/dock_widgets/command_line/tests/qg_commandwidget_tests.cpp
+        librecad/src/ui/components/pen/tests/qg_widgetpen_tests.cpp
+        librecad/src/ui/dock_widgets/layers_tree/tests/lc_layertreewidget_tests.cpp
         librecad/src/plugins/tests/qc_actiongetselect_tests.cpp
         librecad/src/lib/gui/tests/lc_graphicviewrenderer_tests.cpp
         librecad/src/main/tests/console_command_utils_tests.cpp
