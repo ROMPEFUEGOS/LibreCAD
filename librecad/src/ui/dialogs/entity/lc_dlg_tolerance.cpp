@@ -23,6 +23,7 @@
 
 #include "lc_dlg_tolerance.h"
 
+#include "lc_graphicviewport.h"
 #include "rs_graphic.h"
 #include "ui_lc_dlg_tolerance.h"
 
@@ -73,6 +74,7 @@ void LC_DlgTolerance::setEntity(const LC_Tolerance* e) {
     if (lay != nullptr) {
         ui->cbLayer->setLayer(*lay);
     }
+    ui->wPen->setLineTypesOf(m_viewport != nullptr ? m_viewport->getGraphic() : nullptr);
     ui->wPen->setPen(e, lay, tr("Pen"));
 }
 

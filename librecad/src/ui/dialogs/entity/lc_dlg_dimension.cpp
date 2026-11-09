@@ -31,6 +31,7 @@
 #include "lc_dimstylepreviewpanel.h"
 #include "lc_dimstylestreemodel.h"
 #include "lc_dlgdimstylemanager.h"
+#include "lc_graphicviewport.h"
 #include "lc_inputtextdialog.h"
 #include "rs_dimension.h"
 #include "rs_dimlinear.h"
@@ -240,6 +241,7 @@ void LC_DlgDimension::setupDimensionAttributesUI(const RS_Dimension* dim) {
         ui->cbLayer->setLayer(*lay);
     }
 
+    ui->wPenEditor->setLineTypesOf(m_viewport != nullptr ? m_viewport->getGraphic() : nullptr);
     ui->wPenEditor->setPen(m_entity, lay, tr("Pen"));
 
     ui->wLabel->setRadialType(*dim);

@@ -26,6 +26,7 @@
 #include <QToolButton>
 
 #include "lc_dlg_dimension.h"
+#include "lc_graphicviewport.h"
 #include "lc_hatchpropertieseditingwidget.h"
 #include "lc_entitypropertieseditorwidget.h"
 #include "lc_mtextpropertieseditingwidget.h"
@@ -100,6 +101,8 @@ LC_DlgEntityProperties::LC_DlgEntityProperties(QWidget* parent, LC_GraphicViewpo
         delete ui->frmBottom;
     }
 
+    // The drawing the viewport shows supplies the line types the pen may name.
+    ui->wPen->setLineTypesOf(viewport != nullptr ? viewport->getGraphic() : nullptr);
     setupEntityLayerAndAttributesUI(entity);
 
     if (primaryEditingWidget != nullptr) {

@@ -30,6 +30,7 @@
 
 #include "rs_debug.h"
 #include "rs_entity.h"
+#include "rs_graphic.h"
 #include "rs_layer.h"
 
 /*
@@ -54,7 +55,13 @@ void QG_WidgetPen::disableVerticalSpacer() const {
 }
 
 void QG_WidgetPen::setLineTypesOf(const RS_Graphic* graphic) {
-    (void)graphic;
+    if (!m_initialized) {
+        // The first setPen() knows the flags the combo needs; hold the drawing
+        // until then.
+        m_pendingGraphic = graphic;
+        return;
+    }
+    cbLineType->rebuild(graphic != nullptr ? &graphic->getLineTypeList() : nullptr);
 }
 
 void QG_WidgetPen::onColorChanged([[maybe_unused]] const RS_Color& color) {
@@ -75,16 +82,18 @@ void QG_WidgetPen::notifyPenChanged() {
 
 void QG_WidgetPen::setPen(const RS_Pen& pen, const bool showByLayer, const bool showUnchanged, const QString& title) {
     if (!m_initialized) {
+        const LC_LineTypeList* list =
+            m_pendingGraphic != nullptr ? &m_pendingGraphic->getLineTypeList() : nullptr;
         cbColor->init(showByLayer, showUnchanged);
         cbWidth->init(showByLayer, showUnchanged);
-        cbLineType->init(showByLayer, showUnchanged);
+        cbLineType->init(list, showByLayer, showUnchanged);
+        m_pendingGraphic = nullptr;
         m_initialized = true;
     }
     if (!showUnchanged) {
-        m_sourcePen = pen;
         cbColor->setColor(pen.getColor());
         cbWidth->setWidth(pen.getWidth());
-        cbLineType->setLineType(pen.getLineType());
+        cbLineType->setLineTypeOf(pen);
     }
 
     if (!title.isEmpty()) {
@@ -125,13 +134,7 @@ RS_Pen QG_WidgetPen::getPen() const {
 
     pen.setColor(cbColor->getColor());
     pen.setWidth(cbWidth->getWidth());
-    // The combo lists built-ins only: keep a name it cannot show.
-    if (cbLineType->getLineType() == m_sourcePen.getLineType()) {
-        pen.setLineTypeFromPen(m_sourcePen);
-    }
-    else {
-        pen.setLineType(cbLineType->getLineType());
-    }
+    cbLineType->applyLineTypeTo(pen);
 
     return pen;
 }

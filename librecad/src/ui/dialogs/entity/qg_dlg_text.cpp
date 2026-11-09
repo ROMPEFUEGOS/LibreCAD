@@ -29,6 +29,7 @@
 #include <QFileDialog>
 #include <QTextStream>
 
+#include "lc_graphicviewport.h"
 #include "rs_fontlist.h"
 #include "rs_graphic.h"
 #include "rs_settings.h"
@@ -220,6 +221,7 @@ void QG_DlgText::setEntity(RS_Text* t, const bool isNew) {
             cbLayer->setLayer(*lay);
         }
 
+        wPen->setLineTypesOf(m_viewport != nullptr ? m_viewport->getGraphic() : nullptr);
         wPen->setPen(m_entity, lay, tr("Pen"));
     }
 

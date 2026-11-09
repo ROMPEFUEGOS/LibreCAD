@@ -31,6 +31,7 @@
 #include <QFileDialog>
 #include <QShortcut>
 
+#include "lc_graphicviewport.h"
 #include "lc_linemath.h"
 #include "rs_font.h"
 #include "rs_fontlist.h"
@@ -245,6 +246,7 @@ void QG_DlgMText::setEntity(RS_MText* t, const bool isNew) {
             cbLayer->setLayer(*layer);
         }
 
+        wPen->setLineTypesOf(m_viewport != nullptr ? m_viewport->getGraphic() : nullptr);
         wPen->setPen(m_entity, layer, tr("Pen"));
         leftToRight = m_entity->getDrawingDirection() != RS_MTextData::RightToLeft;
     }
