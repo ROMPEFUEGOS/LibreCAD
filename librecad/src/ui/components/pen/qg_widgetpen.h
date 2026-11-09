@@ -43,7 +43,10 @@ public:
     bool isLineTypeUnchanged() const;
     bool isWidthUnchanged() const;
     /// Offers the line types of a drawing in the line type combo; null means the
-    /// built-in rows only. Call it before the first setPen().
+    /// built-in rows only. Before the first setPen() the widget only remembers
+    /// the drawing, which must stay alive until that call; afterwards the call
+    /// refills the combo for the new drawing, keeps the selection and emits
+    /// nothing.
     void setLineTypesOf(const RS_Graphic* graphic);
 public slots:
     void setPen(const RS_Pen& pen, bool showByLayer, bool showUnchanged, const QString & title );

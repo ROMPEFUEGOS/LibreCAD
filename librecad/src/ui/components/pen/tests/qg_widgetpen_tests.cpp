@@ -246,4 +246,5 @@ TEST_CASE("A drawing given after the pen keeps the selection", "[gui][pen][linet
     CHECK(emissions == 0);
     CHECK(combo->findText(QStringLiteral("VENDOR_TAB")) >= 0);
     CHECK(widget.getPen() == before);
+    CHECK(widget.getPen().getLineTypeId() == before.getLineTypeId());
 }
