@@ -30,6 +30,7 @@
 #include "ui_qg_widgetpen.h"
 
 class RS_Entity;
+class RS_Graphic;
 class RS_Layer;
 
 class QG_WidgetPen : public QWidget, public Ui::QG_WidgetPen{
@@ -41,6 +42,9 @@ public:
     bool isColorUnchanged() const;
     bool isLineTypeUnchanged() const;
     bool isWidthUnchanged() const;
+    /// Offers the line types of a drawing in the line type combo; null means the
+    /// built-in rows only. Call it before the first setPen().
+    void setLineTypesOf(const RS_Graphic* graphic);
 public slots:
     void setPen(const RS_Pen& pen, bool showByLayer, bool showUnchanged, const QString & title );
     void setPen(const RS_Pen& pen, const RS_Layer* layer, const QString &title);

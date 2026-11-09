@@ -53,6 +53,10 @@ void QG_WidgetPen::disableVerticalSpacer() const {
     vsSpacerVertical->changeSize(0, 0);
 }
 
+void QG_WidgetPen::setLineTypesOf(const RS_Graphic* graphic) {
+    (void)graphic;
+}
+
 void QG_WidgetPen::onColorChanged([[maybe_unused]] const RS_Color& color) {
     notifyPenChanged();
 }

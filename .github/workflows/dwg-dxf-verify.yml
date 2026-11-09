@@ -74,6 +74,8 @@ on:
       - 'librecad/src/lib/gui/tests/lc_linetype_render_tests.cpp'
       - 'librecad/src/lib/gui/tests/lc_graphicviewrenderer_tests.cpp'
       - 'librecad/src/ui/components/comboboxes/**'
+      - 'librecad/src/ui/components/pen/**'
+      - 'librecad/src/ui/dialogs/entity/**'
       - 'librecad/src/lib/engine/document/linetypes/**'
       - 'scripts/dwg-fast-check.sh'
   pull_request:
@@ -126,6 +128,8 @@ on:
       - 'librecad/src/lib/gui/tests/lc_linetype_render_tests.cpp'
       - 'librecad/src/lib/gui/tests/lc_graphicviewrenderer_tests.cpp'
       - 'librecad/src/ui/components/comboboxes/**'
+      - 'librecad/src/ui/components/pen/**'
+      - 'librecad/src/ui/dialogs/entity/**'
       - 'librecad/src/lib/engine/document/linetypes/**'
       - 'scripts/dwg-fast-check.sh'
   workflow_dispatch:
