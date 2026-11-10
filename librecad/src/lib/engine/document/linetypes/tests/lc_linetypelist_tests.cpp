@@ -788,3 +788,138 @@ TEST_CASE("LC_LineTypeList::merge by name copies the definitions the names find"
     CHECK_FALSE(destination.isModified());
     CHECK(destination.count() == 38);
 }
+
+TEST_CASE("LC_LineTypeList::merge of one entry brings its dashes",
+          "[linetype][list][merge]") {
+    LC_LineTypeList list;
+    list.setModified(false);
+    const unsigned builtins = list.count();
+
+    // A name the list lacks gains a copy, with no record of this drawing.
+    LC_LineType incoming(QStringLiteral("VENDOR_TAB"));
+    incoming.description = QStringLiteral("Tabulated");
+    incoming.pattern = {10.0, -5.0};
+    list.merge(incoming);
+    CHECK(list.count() == builtins + 1);
+    CHECK(list.isModified());
+    const LC_LineType* copy = list.find(QStringLiteral("VENDOR_TAB"));
+    REQUIRE(copy != nullptr);
+    CHECK(copy != &incoming);
+    CHECK(copy->name == QStringLiteral("VENDOR_TAB"));
+    CHECK(copy->description == QStringLiteral("Tabulated"));
+    CHECK(copy->pattern == std::vector<double>{10.0, -5.0});
+    CHECK_FALSE(copy->hasImportedRecord);
+
+    // An entry without dashes brings nothing.
+    list.setModified(false);
+    LC_LineType noDashes(QStringLiteral("VENDOR_EMPTY"));
+    list.merge(noDashes);
+    CHECK(list.find(QStringLiteral("VENDOR_EMPTY")) == nullptr);
+    CHECK_FALSE(list.isModified());
+
+    // A blank name brings nothing.
+    LC_LineType blank(QStringLiteral("   "));
+    blank.pattern = {1.0, -1.0};
+    list.merge(blank);
+    CHECK(list.count() == builtins + 1);
+    CHECK_FALSE(list.isModified());
+
+    // A record that only names a line type takes the dashes; its spelling and
+    // its record stay its own.
+    LC_LineType* naming = list.add(makeRecord(QStringLiteral("Vendor_named"), {},
+                                              QStringLiteral("Ours")));
+    REQUIRE(naming != nullptr);
+    list.setModified(false);
+    LC_LineType theirs(QStringLiteral("VENDOR_NAMED"));
+    theirs.pattern = {4.0, -4.0};
+    list.merge(theirs);
+    CHECK(list.find(QStringLiteral("VENDOR_NAMED")) == naming);
+    CHECK(naming->name == QStringLiteral("Vendor_named"));
+    CHECK(naming->description == QStringLiteral("Ours"));
+    CHECK(naming->pattern == std::vector<double>{4.0, -4.0});
+    CHECK(list.isModified());
+
+    // A definition of its own stays.
+    list.setModified(false);
+    LC_LineType weaker(QStringLiteral("VENDOR_TAB"));
+    weaker.pattern = {1.0, -1.0};
+    list.merge(weaker);
+    const LC_LineType* kept = list.find(QStringLiteral("VENDOR_TAB"));
+    REQUIRE(kept != nullptr);
+    CHECK(kept->pattern == std::vector<double>{10.0, -5.0});
+    CHECK_FALSE(list.isModified());
+}
+
+TEST_CASE("A drawing adopts a line type without becoming modified",
+          "[linetype][list][graphic]") {
+    (void)lc::test::ensureSettings();
+    RS_Graphic graphic;
+    graphic.initForNewDocument();
+    graphic.setModified(false);
+    REQUIRE_FALSE(graphic.isModified());
+
+    LC_LineType entry(QStringLiteral("VENDOR_TAB"));
+    entry.description = QStringLiteral("Tabulated");
+    entry.pattern = {10.0, -5.0};
+    LC_LineType* adopted = graphic.adoptLineType(entry);
+    REQUIRE(adopted != nullptr);
+    CHECK(adopted == graphic.findLineType(QStringLiteral("VENDOR_TAB")));
+    CHECK(adopted->pattern == std::vector<double>{10.0, -5.0});
+    CHECK(adopted->description == QStringLiteral("Tabulated"));
+    CHECK_FALSE(adopted->hasImportedRecord);
+    CHECK_FALSE(graphic.isModified());
+    CHECK_FALSE(graphic.getLineTypeList().isModified());
+
+    // The drawing's own definition wins.
+    LC_LineType other(QStringLiteral("VENDOR_TAB"));
+    other.pattern = {1.0, -1.0};
+    LC_LineType* again = graphic.adoptLineType(other);
+    REQUIRE(again != nullptr);
+    CHECK(again == adopted);
+    CHECK(again->pattern == std::vector<double>{10.0, -5.0});
+
+    // A record that only names a line type takes the incoming dashes.
+    RS_Graphic naming;
+    naming.initForNewDocument();
+    LC_LineType* spelling = naming.addLineType(makeRecord(QStringLiteral("vendor_tab"), {}));
+    REQUIRE(spelling != nullptr);
+    naming.setModified(false);
+    LC_LineType* filled = naming.adoptLineType(entry);
+    REQUIRE(filled != nullptr);
+    CHECK(filled == spelling);
+    CHECK(filled->name == QStringLiteral("vendor_tab"));
+    CHECK(filled->pattern == std::vector<double>{10.0, -5.0});
+    CHECK_FALSE(naming.isModified());
+    CHECK_FALSE(naming.getLineTypeList().isModified());
+
+    // A built-in is never altered.
+    const LC_LineType* seedDashed = graphic.findLineType(QStringLiteral("DASHED"));
+    REQUIRE(seedDashed != nullptr);
+    const std::vector<double> seeded = seedDashed->pattern;
+    LC_LineType builtin(QStringLiteral("DASHED"));
+    builtin.pattern = {64.0, -32.0};
+    LC_LineType* kept = graphic.adoptLineType(builtin);
+    REQUIRE(kept == seedDashed);
+    CHECK(kept->pattern == seeded);
+    CHECK(kept->origin == LC_LineType::Origin::BuiltIn);
+    CHECK_FALSE(graphic.isModified());
+    CHECK_FALSE(graphic.getLineTypeList().isModified());
+
+    // An entry without dashes, and one with a blank name, add nothing.
+    const unsigned rows = graphic.countLineTypes();
+    LC_LineType noDashes(QStringLiteral("VENDOR_DOT"));
+    CHECK(graphic.adoptLineType(noDashes) == nullptr);
+    CHECK(graphic.countLineTypes() == rows);
+    LC_LineType blank(QStringLiteral("   "));
+    blank.pattern = {1.0, -1.0};
+    CHECK(graphic.adoptLineType(blank) == nullptr);
+    CHECK(graphic.countLineTypes() == rows);
+    CHECK_FALSE(graphic.isModified());
+
+    // A drawing already modified stays modified.
+    graphic.setModified(true);
+    LC_LineType third(QStringLiteral("VENDOR_DOT"));
+    third.pattern = {0.0, -5.0};
+    CHECK(graphic.adoptLineType(third) != nullptr);
+    CHECK(graphic.isModified());
+}

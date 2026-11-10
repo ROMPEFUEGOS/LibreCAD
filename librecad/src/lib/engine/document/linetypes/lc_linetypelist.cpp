@@ -216,6 +216,9 @@ void LC_LineTypeList::merge(const LC_LineTypeList& source) {
     }
 }
 
+void LC_LineTypeList::merge(const LC_LineType&) {
+}
+
 void LC_LineTypeList::merge(const LC_LineTypeList& source, const std::vector<QString>& names) {
     for (const QString& name : names) {
         const LC_LineType* incoming = source.find(name);

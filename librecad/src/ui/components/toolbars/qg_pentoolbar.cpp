@@ -118,6 +118,14 @@ void QG_PenToolBar::setLineType(const RS2::LineType lineType) const {
     m_lineTypeBox->setLineType(lineType);
 }
 
+void QG_PenToolBar::setLineType(const RS_Pen& pen) const {
+    setLineType(pen.getLineType());
+}
+
+void QG_PenToolBar::setLayerLineType(const RS_Pen& layerPen, const bool updateSelection) {
+    setLayerLineType(layerPen.getLineType(), updateSelection);
+}
+
 void QG_PenToolBar::setLayerWidth(const RS2::LineWidth width, const bool updateSelection) {
     m_widthBox->setLayerWidth(width);
     if (updateSelection) {

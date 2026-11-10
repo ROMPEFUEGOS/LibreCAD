@@ -430,6 +430,10 @@ bool RS_Graphic::removeLayer(RS_Layer* layer) {
  * elements. Names given by handle are left out: a handle only resolves through
  * a record the file already has.
  */
+LC_LineType* RS_Graphic::adoptLineType(const LC_LineType&) {
+    return nullptr;
+}
+
 std::vector<QString> RS_Graphic::referencedLineTypeNames() const {
     std::vector<QString> names;
     QSet<QString> seenNames;

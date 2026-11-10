@@ -59,10 +59,12 @@ public:
     void setLayerColor(const RS_Color& color, bool updateSelection);
     void setLayerWidth(RS2::LineWidth width, bool updateSelection);
     void setLayerLineType(RS2::LineType lineType, bool updateSelection);
+    void setLayerLineType(const RS_Pen& layerPen, bool updateSelection);
 
     void setColor(const RS_Color& color) const;
     void setWidth(RS2::LineWidth width) const;
     void setLineType(RS2::LineType lineType) const;
+    void setLineType(const RS_Pen& pen) const;
     void emitPenChanged();
 
     void setGraphicView(RS_GraphicView* gview) override;

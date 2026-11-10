@@ -194,6 +194,11 @@ public:
     LC_LineType* lineTypeAt(const unsigned i) const {return m_lineTypeList.at(i);}
     LC_LineType* addLineType(LC_LineType* lineType) {return m_lineTypeList.add(lineType);}
     LC_LineType* findLineType(const QString& name) const {return m_lineTypeList.find(name);}
+    /// Takes the definition of a line type that arrives with a pen, as a paste
+    /// takes those of the entities it brings: a copy when the table has no
+    /// entry of that name, the dashes when its entry has none. The drawing is
+    /// not marked modified: the user has not edited it.
+    LC_LineType* adoptLineType(const LC_LineType& entry);
     const LC_LineTypeList& getLineTypeList() const {return m_lineTypeList;}
     void mergeLineTypes(const RS_Graphic& source) {m_lineTypeList.merge(source.m_lineTypeList);}
     /// every line type name the drawing gives as a string, each once
