@@ -2854,6 +2854,7 @@ if (BUILD_TESTS)
         librecad/src/ui/components/comboboxes/tests/qg_linetypebox_tests.cpp
         librecad/src/ui/components/toolbars/tests/qg_pentoolbar_tests.cpp
         librecad/src/ui/dialogs/entity/tests/lc_entity_dialog_linetype_tests.cpp
+        librecad/src/ui/dialogs/tests/lc_layer_dialog_linetype_tests.cpp
         librecad/src/ui/dialogs/tests/lc_dialog_tests.cpp
         librecad/src/ui/dialogs/tests/lc_language_selection_tests.cpp
         librecad/src/ui/dialogs/tests/lc_translation_catalog_tests.cpp
@@ -3564,6 +3565,7 @@ if (BUILD_TESTS)
         librecad/src/ui/components/pen/tests/qg_widgetpen_tests.cpp
         librecad/src/ui/components/toolbars/tests/qg_pentoolbar_tests.cpp
         librecad/src/ui/dialogs/entity/tests/lc_entity_dialog_linetype_tests.cpp
+        librecad/src/ui/dialogs/tests/lc_layer_dialog_linetype_tests.cpp
         ${LIBRECAD_RES})
     set_target_properties(librecad_linetype_ui_tests PROPERTIES AUTORCC ON)
     # Later rungs test widgets whose headers include their uic output.

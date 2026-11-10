@@ -30,6 +30,7 @@
 #include "lc_layertreeitem.h"
 #include "ui_lc_layerdialog_ex.h"
 
+class RS_Graphic;
 class RS_LayerList;
 class RS_Layer;
 class LC_LayerTreeModel;
@@ -54,6 +55,7 @@ public:
     int getEditedLayerType() const;
     void disableNames() const;
     void setLayer(const RS_Layer *layer) const;
+    void setLineTypesOf(const RS_Graphic* graphic);
     void allowChangingLayerType(bool value);
     RS_Pen getPen() const;
     bool isConstruction() const {return cbConstructionLayer->isChecked();}

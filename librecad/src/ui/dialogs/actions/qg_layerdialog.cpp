@@ -56,6 +56,9 @@ void QG_LayerDialog::languageChange() {
     retranslateUi(this);
 }
 
+void QG_LayerDialog::setLineTypesOf([[maybe_unused]] const RS_Graphic* graphic) {
+}
+
 void QG_LayerDialog::setLayer(RS_Layer* l) {
     m_layer = l;
     m_layerName = m_layer->getName();

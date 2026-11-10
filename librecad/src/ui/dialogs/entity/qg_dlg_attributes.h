@@ -30,6 +30,7 @@
 #include "ui_qg_dlg_attributes.h"
 
 struct RS_AttributesData;
+class RS_Graphic;
 class RS_LayerList;
 
 class QG_DlgAttributes : public LC_Dialog, public Ui::QG_DlgAttributes{
@@ -38,7 +39,8 @@ public:
     explicit QG_DlgAttributes(QWidget* parent = nullptr);
     ~QG_DlgAttributes() override;
 public slots:
-    void setData( RS_AttributesData * data, RS_LayerList & layerList );
+    // graphic: drawing whose line types the dialog offers; null keeps the built-in rows.
+    void setData( RS_AttributesData * data, RS_LayerList & layerList, const RS_Graphic* graphic = nullptr );
     void updateData() const;
 protected slots:
     void languageChange();

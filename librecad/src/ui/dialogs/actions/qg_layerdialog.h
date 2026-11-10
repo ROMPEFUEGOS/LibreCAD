@@ -29,6 +29,7 @@
 #include "lc_dialog.h"
 #include "ui_qg_layerdialog.h"
 
+class RS_Graphic;
 class RS_Layer;
 class RS_LayerList;
 
@@ -41,6 +42,7 @@ public slots:
     void updateLayer() const;
     void validate();
     void setLayerList(RS_LayerList* ll);
+    void setLineTypesOf(const RS_Graphic* graphic);
     void setEditLayer(bool el);
     //! @return a reference to the QLineEdit object.
     QLineEdit* getQLineEdit() const;

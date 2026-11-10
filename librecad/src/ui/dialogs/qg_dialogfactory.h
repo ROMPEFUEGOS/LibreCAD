@@ -66,13 +66,13 @@ public:
     void requestWarningDialog(const QString& warning) override;
 
     RS_Layer* requestNewLayerDialog(
-        RS_LayerList* layerList = nullptr) override;
+        RS_LayerList* layerList = nullptr, const RS_Graphic* graphic = nullptr) override;
     RS_Layer* requestLayerRemovalDialog(
         RS_LayerList* layerList = nullptr) override;
     QStringList requestSelectedLayersRemovalDialog(
         RS_LayerList* layerList = nullptr) override;
     RS_Layer* requestEditLayerDialog(
-        RS_LayerList* layerList = nullptr) override;
+        RS_LayerList* layerList = nullptr, const RS_Graphic* graphic = nullptr) override;
 
     RS_BlockData requestNewBlockDialog(RS_BlockList* blockList, const QString& title = {}) override;
     RS_Block* requestBlockRemovalDialog(
@@ -88,7 +88,8 @@ public:
     QString requestImageOpenDialog() override;
 
     bool requestAttributesDialog(RS_AttributesData& data,
-                                 RS_LayerList& layerList) override;
+                                 RS_LayerList& layerList,
+                                 const RS_Graphic* graphic = nullptr) override;
 
     bool requestModifyEntityDialog(RS_Entity *entity, LC_GraphicViewport *viewport) override;
     bool requestMTextDialog(RS_MText *text, LC_GraphicViewport *viewport) override;

@@ -92,11 +92,13 @@ public:
      * created. The method must create the new layer but not add
      * it to the layer list. The latter is up to the caller.
      *
+     * @param graphic Drawing whose line types the dialog offers; null keeps the built-in rows.
      * @return The implementation is expected to return a pointer
      *         to the newly created layer or NULL if the user
      *         cancels the dialog.
      */
-    virtual RS_Layer* requestNewLayerDialog([[maybe_unused]] RS_LayerList* layerList = nullptr) {
+    virtual RS_Layer* requestNewLayerDialog([[maybe_unused]] RS_LayerList* layerList = nullptr,
+                                            [[maybe_unused]] const RS_Graphic* graphic = nullptr) {
         return nullptr;
     }
 
@@ -133,11 +135,13 @@ public:
      * a dialog to edit the layers attributes. The method must
      * not actually edit the layer. This is up to the caller.
      *
+     * @param graphic Drawing whose line types the dialog offers; null keeps the built-in rows.
      * @return The implementation is expected to return a pointer
      *         to the modified layer or NULL if the user
      *         cancels the dialog.
      */
-    virtual RS_Layer* requestEditLayerDialog([[maybe_unused]] RS_LayerList* layerList = nullptr) {
+    virtual RS_Layer* requestEditLayerDialog([[maybe_unused]] RS_LayerList* layerList = nullptr,
+                                             [[maybe_unused]] const RS_Graphic* graphic = nullptr) {
         return nullptr;
     }
 
@@ -244,8 +248,10 @@ public:
      * @param data Attribute data which can be directly changed
      *             by the presented widget.
      * @param layerList
+     * @param graphic Drawing whose line types the dialog offers; null keeps the built-in rows.
      */
-    virtual bool requestAttributesDialog([[maybe_unused]] RS_AttributesData& data, [[maybe_unused]] RS_LayerList& layerList) {
+    virtual bool requestAttributesDialog([[maybe_unused]] RS_AttributesData& data, [[maybe_unused]] RS_LayerList& layerList,
+                                         [[maybe_unused]] const RS_Graphic* graphic = nullptr) {
         return false;
     }
 

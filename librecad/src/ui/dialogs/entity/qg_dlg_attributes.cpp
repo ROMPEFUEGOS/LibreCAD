@@ -54,7 +54,7 @@ void QG_DlgAttributes::languageChange(){
     retranslateUi(this);
 }
 
-void QG_DlgAttributes::setData(RS_AttributesData* data, RS_LayerList& layerList) {
+void QG_DlgAttributes::setData(RS_AttributesData* data, RS_LayerList& layerList, [[maybe_unused]] const RS_Graphic* graphic) {
     m_attributesData = data;
 
     //pen = line->getPen();
