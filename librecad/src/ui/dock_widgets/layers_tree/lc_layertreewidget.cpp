@@ -1915,6 +1915,7 @@ int LC_LayerTreeWidget::invokeLayersRemovalDialog(const QStringList &layerNames)
  */
 void LC_LayerTreeWidget::invokeLayerEditOrRenameDialog(LC_LayerTreeItem *pItem, bool edit){
     auto dlg = LC_LayerDialogEx(this, QMessageBox::tr("Layer DialogEx"), m_layerTreeModel, pItem, m_layerList);
+    dlg.setLineTypesOf(m_graphic);
 
     RS_Layer* layer = nullptr;
     int originalLayerType = LC_LayerTreeItem::NOT_DEFINED_LAYER_TYPE;
@@ -1973,6 +1974,7 @@ void LC_LayerTreeWidget::invokeLayerEditOrRenameDialog(LC_LayerTreeItem *pItem, 
  */
 void LC_LayerTreeWidget::invokeLayerAddDialog(LC_LayerTreeItem *parentItem, int layerType){
     auto dlg = LC_LayerDialogEx(this, QMessageBox::tr("Layer DialogEx"), m_layerTreeModel, parentItem, m_layerList);
+    dlg.setLineTypesOf(m_graphic);
 
     // setup dialog first
     int dialogMode = LC_LayerDialogEx::MODE_ADD_CHILD_LAYER;

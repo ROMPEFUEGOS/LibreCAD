@@ -177,7 +177,8 @@ void LC_LayerDialogEx::disableNames() const {
     lParentPathName->setVisible(false);
 }
 
-void LC_LayerDialogEx::setLineTypesOf([[maybe_unused]] const RS_Graphic* graphic) {
+void LC_LayerDialogEx::setLineTypesOf(const RS_Graphic* graphic) {
+    wPen->setLineTypesOf(graphic);
 }
 
 void LC_LayerDialogEx::setLayer(const RS_Layer* layer) const {

@@ -56,7 +56,8 @@ void QG_LayerDialog::languageChange() {
     retranslateUi(this);
 }
 
-void QG_LayerDialog::setLineTypesOf([[maybe_unused]] const RS_Graphic* graphic) {
+void QG_LayerDialog::setLineTypesOf(const RS_Graphic* graphic) {
+    wPen->setLineTypesOf(graphic);
 }
 
 void QG_LayerDialog::setLayer(RS_Layer* l) {

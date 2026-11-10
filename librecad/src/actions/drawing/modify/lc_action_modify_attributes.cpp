@@ -46,7 +46,7 @@ bool LC_ActionModifyAttributes::doTriggerModifications(LC_DocumentModificationBa
 
     if (m_graphic != nullptr) {
         m_dialogVisible = true;
-        if (RS_DIALOGFACTORY->requestAttributesDialog(data,*m_graphic->getLayerList())) {
+        if (RS_DIALOGFACTORY->requestAttributesDialog(data,*m_graphic->getLayerList(), m_graphic)) {
             RS_Modification::changeAttributes(m_selectedEntities, data, ctx);
             ctx.dontSetActiveLayerAndPen();
             if (data.applyBlockDeep) {

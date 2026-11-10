@@ -95,7 +95,7 @@ void QG_DialogFactory::requestWarningDialog(const QString& warning) {
  * @return a pointer to the newly created layer that
  * should be added.
  */
-RS_Layer* QG_DialogFactory::requestNewLayerDialog(RS_LayerList* layerList, [[maybe_unused]] const RS_Graphic* graphic) {
+RS_Layer* QG_DialogFactory::requestNewLayerDialog(RS_LayerList* layerList, const RS_Graphic* graphic) {
     RS_Layer* layer{nullptr};
 
     QString newLayerName;
@@ -129,6 +129,7 @@ RS_Layer* QG_DialogFactory::requestNewLayerDialog(RS_LayerList* layerList, [[may
     layer = new RS_Layer(newLayerName);
 
     QG_LayerDialog dlg(parent, "Layer Dialog");
+    dlg.setLineTypesOf(graphic);
     dlg.setLayer(layer);
     dlg.setLayerList(layerList);
     dlg.getQLineEdit()->selectAll();
@@ -292,7 +293,7 @@ QStringList QG_DialogFactory::requestSelectedLayersRemovalDialog(RS_LayerList* l
  * @return A pointer to a new layer with the changed attributes
  *         or nullptr if the dialog was cancelled.
  */
-RS_Layer* QG_DialogFactory::requestEditLayerDialog(RS_LayerList* layerList, [[maybe_unused]] const RS_Graphic* graphic) {
+RS_Layer* QG_DialogFactory::requestEditLayerDialog(RS_LayerList* layerList, const RS_Graphic* graphic) {
     RS_DEBUG->print("QG_DialogFactory::requestEditLayerDialog");
 
     RS_Layer* layer = nullptr;
@@ -316,6 +317,7 @@ RS_Layer* QG_DialogFactory::requestEditLayerDialog(RS_LayerList* layerList, [[ma
         layer = new RS_Layer(*layerList->getActive());
 
         QG_LayerDialog dlg(parent, QMessageBox::tr("Layer Dialog"));
+        dlg.setLineTypesOf(graphic);
         dlg.setLayer(layer);
         dlg.setLayerList(layerList);
         dlg.setEditLayer(true);
@@ -562,9 +564,9 @@ QString QG_DialogFactory::requestImageOpenDialog() {
 /**
  * Shows attributes options dialog presenting the given data.
  */
-bool QG_DialogFactory::requestAttributesDialog(RS_AttributesData& data, RS_LayerList& layerList, [[maybe_unused]] const RS_Graphic* graphic) {
+bool QG_DialogFactory::requestAttributesDialog(RS_AttributesData& data, RS_LayerList& layerList, const RS_Graphic* graphic) {
     QG_DlgAttributes dlg(parent);
-    dlg.setData(&data, layerList);
+    dlg.setData(&data, layerList, graphic);
     if (dlg.exec() != 0) {
         dlg.updateData();
         return true;
