@@ -106,9 +106,9 @@ void LC_ActionPenPick::applyPenToPenToolBar(const RS_Entity* entity) const {
                 const RS_Color &color = pen.getColor();
                 // todo - processing of "By Block" - is it needed there?
                 if (lineType == RS2::LineType::LineByLayer){
-                    penToolBar->setLayerLineType(layerPen.getLineType(), true);
+                    penToolBar->setLayerLineType(layerPen, true);
                 } else {
-                    penToolBar->setLineType(lineType);
+                    penToolBar->setLineType(pen);
                 }
 
                 if (width == RS2::LineWidth::WidthByLayer){

@@ -808,7 +808,7 @@ void LC_PenPaletteWidget::updatePenToolbarByActiveLayer() const {
             const RS_Layer* layer = m_layerList->getActive();
             if (layer != nullptr) {
                 const RS_Pen layerPen = layer->getPen();
-                penToolBar->setLayerLineType(layerPen.getLineType(), true);
+                penToolBar->setLayerLineType(layerPen, true);
                 penToolBar->setLayerWidth(layerPen.getWidth(), true);
                 penToolBar->setLayerColor(layerPen.getColor(), true);
             }
@@ -840,7 +840,7 @@ void LC_PenPaletteWidget::applyEditorPenToPenToolBar() const {
                     // todo... mmm - what is semantic of "by block" in pen toolbar?
                     if (lineType == RS2::LineType::LineByLayer) {
                         // we set pen from currently active layer
-                        penToolBar->setLayerLineType(layerPen.getLineType(), true);
+                        penToolBar->setLayerLineType(layerPen, true);
                     }
                     else {
                         // set linetype from editor
@@ -986,7 +986,7 @@ void LC_PenPaletteWidget::applySelectedPenItemToPenToolBar() {
                         // not unchanged
                         if (lineType == RS2::LineType::LineByLayer) {
                             // apply attributes from layer if it is by layer
-                            penToolBar->setLayerLineType(layerPen.getLineType(), true);
+                            penToolBar->setLayerLineType(layerPen, true);
                         }
                         else {
                             // apply attribute from pen

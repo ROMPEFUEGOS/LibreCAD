@@ -28,7 +28,10 @@
 #define QG_PENTOOLBAR_H
 #include <QToolBar>
 
+#include <optional>
+
 #include "lc_graphicviewaware.h"
+#include "lc_linetype.h"
 #include "rs_layerlistlistener.h"
 #include "rs_pen.h"
 
@@ -78,12 +81,18 @@ public
     void penChanged(RS_Pen);
 
 private:
+    /// Keeps the definition of the line type the active pen names, as the
+    /// drawing shown defines it, so the next drawing can take it.
+    void rememberLineTypeDefinition();
     void setLayerList(RS_LayerList* ll);
     RS_LayerList* m_layerList{nullptr};
     std::unique_ptr<RS_Pen> m_currentPen;
     std::unique_ptr<QG_ColorBox> m_colorBox;
     std::unique_ptr<QG_WidthBox> m_widthBox;
     std::unique_ptr<QG_LineTypeBox> m_lineTypeBox;
+    /// The definition of the line type the active pen names, kept so a drawing
+    /// it moves to can take it.
+    std::optional<LC_LineType> m_lineTypeDefinition;
 };
 
 #endif

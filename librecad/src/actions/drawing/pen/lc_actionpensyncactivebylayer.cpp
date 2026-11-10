@@ -40,7 +40,7 @@ void LC_ActionPenSyncActiveByLayer::init(const int status){
                 const RS_Layer *layer = m_graphic->getActiveLayer();
                 if (layer != nullptr){
                     const RS_Pen layerPen = layer->getPen();
-                    penToolBar->setLayerLineType(layerPen.getLineType(), true);
+                    penToolBar->setLayerLineType(layerPen, true);
                     penToolBar->setLayerWidth(layerPen.getWidth(), true);
                     penToolBar->setLayerColor(layerPen.getColor(), true);
                 }

@@ -430,8 +430,12 @@ bool RS_Graphic::removeLayer(RS_Layer* layer) {
  * elements. Names given by handle are left out: a handle only resolves through
  * a record the file already has.
  */
-LC_LineType* RS_Graphic::adoptLineType(const LC_LineType&) {
-    return nullptr;
+LC_LineType* RS_Graphic::adoptLineType(const LC_LineType& entry) {
+    const bool wasModified = m_lineTypeList.isModified();
+    m_lineTypeList.merge(entry);
+    // Filling a name-only record is the merge's work, not the user's edit.
+    m_lineTypeList.setModified(wasModified);
+    return m_lineTypeList.find(entry.name);
 }
 
 std::vector<QString> RS_Graphic::referencedLineTypeNames() const {

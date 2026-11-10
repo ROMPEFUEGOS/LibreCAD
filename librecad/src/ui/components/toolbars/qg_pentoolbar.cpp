@@ -22,9 +22,12 @@
 
 #include "qg_pentoolbar.h"
 
+#include <QSignalBlocker>
+
 #include "qg_colorbox.h"
 #include "qg_linetypebox.h"
 #include "qg_widthbox.h"
+#include "lc_linetypenames.h"
 #include "rs_graphic.h"
 #include "rs_graphicview.h"
 #include "rs_layer.h"
@@ -74,7 +77,7 @@ void QG_PenToolBar::updateByLayer(const RS_Layer* l) const {
     const auto& pen = l->getPen();
     m_colorBox->setLayerColor(pen.getColor());
     m_widthBox->setLayerWidth(pen.getWidth());
-    m_lineTypeBox->setLayerLineType(pen.getLineType());
+    m_lineTypeBox->setLayerLineTypeOf(pen);
 }
 
 /**
@@ -115,15 +118,29 @@ void QG_PenToolBar::setLayerLineType(const RS2::LineType lineType, const bool up
 }
 
 void QG_PenToolBar::setLineType(const RS2::LineType lineType) const {
-    m_lineTypeBox->setLineType(lineType);
+    // An enum with no pen behind it: set it as a pen without a name, so the
+    // combo cannot hand back the name of a pen it was given earlier.
+    RS_Pen pen;
+    pen.setLineType(lineType);
+    m_lineTypeBox->setLineTypeOf(pen);
 }
 
 void QG_PenToolBar::setLineType(const RS_Pen& pen) const {
-    setLineType(pen.getLineType());
+    m_lineTypeBox->setLineTypeOf(pen);
 }
 
 void QG_PenToolBar::setLayerLineType(const RS_Pen& layerPen, const bool updateSelection) {
-    setLayerLineType(layerPen.getLineType(), updateSelection);
+    {
+        // The By Layer icon repaint needs no signal; only the final penChanged
+        // may carry the layer pen.
+        const QSignalBlocker blocker(m_lineTypeBox.get());
+        m_lineTypeBox->setLayerLineTypeOf(layerPen);
+    }
+    if (updateSelection) {
+        m_lineTypeBox->setCurrentIndex(0);
+    }
+    m_currentPen->setLineTypeFromPen(layerPen);
+    emitPenChanged();
 }
 
 void QG_PenToolBar::setLayerWidth(const RS2::LineWidth width, const bool updateSelection) {
@@ -158,6 +175,23 @@ void QG_PenToolBar::setLayerList(RS_LayerList* ll) {
 }
 
 void QG_PenToolBar::setGraphicView(RS_GraphicView* gview) {
+    // Refill first: setLayerList() repaints the By Layer row, and a refill after
+    // it would reset that icon. The table that applies is the block-owning
+    // drawing's for a block window.
+    RS_Graphic* tableGraphic = gview != nullptr ? gview->getGraphic(true) : nullptr;
+    if (tableGraphic != nullptr && m_lineTypeDefinition.has_value()) {
+        // The new layer list reports its layer, and the pen then takes what the
+        // row shown writes. Only that line type moves on: a pen that holds a
+        // layer's line type behind the By Layer row becomes By Layer again.
+        RS_Pen shown = *m_currentPen;
+        m_lineTypeBox->applyLineTypeTo(shown);
+        if (shown.hasLineTypeName() &&
+            m_lineTypeDefinition->key() == LC_LineTypeNames::foldName(shown.getLineTypeName())) {
+            // The pen's line type keeps working, and keeps looking right, here too.
+            tableGraphic->adoptLineType(*m_lineTypeDefinition);
+        }
+    }
+    m_lineTypeBox->rebuild(tableGraphic != nullptr ? &tableGraphic->getLineTypeList() : nullptr);
     if (gview == nullptr) {
         setLayerList(nullptr);
     }
@@ -171,6 +205,16 @@ void QG_PenToolBar::setGraphicView(RS_GraphicView* gview) {
             setLayerList(layerList);
         }
     }
+    // A view without a drawing has no rows for names, so the row shown may no
+    // longer say what the active pen holds: show the pen's own row again, quietly.
+    const RS2::LineType shown = m_lineTypeBox->getLineType();
+    if (m_currentPen->hasLineTypeName() && shown != RS2::LineByLayer && shown != RS2::LineByBlock) {
+        const QSignalBlocker blocker(m_lineTypeBox.get());
+        m_lineTypeBox->setLineTypeOf(*m_currentPen);
+    }
+    // The drawing shown is the last word on what the pen's line type looks
+    // like; the next drawing takes that definition.
+    rememberLineTypeDefinition();
 }
 
 RS_Pen QG_PenToolBar::getPen() const {
@@ -208,9 +252,28 @@ void QG_PenToolBar::slotWidthChanged(const RS2::LineWidth w) {
 /**
  * Called when the linetype was changed by the user.
  */
-void QG_PenToolBar::slotLineTypeChanged(const RS2::LineType w) {
-    m_currentPen->setLineType(w);
+void QG_PenToolBar::slotLineTypeChanged([[maybe_unused]] const RS2::LineType w) {
+    m_lineTypeBox->applyLineTypeTo(*m_currentPen);
+    rememberLineTypeDefinition();
     //printf("  line type changed\n");
 
     emit penChanged(*m_currentPen);
+}
+
+void QG_PenToolBar::rememberLineTypeDefinition() {
+    if (!m_currentPen->hasLineTypeName()) {
+        m_lineTypeDefinition.reset();
+        return;
+    }
+    const std::optional<LC_LineType> entry = m_lineTypeBox->definitionOf(*m_currentPen);
+    if (entry.has_value()) {
+        m_lineTypeDefinition = entry;
+    }
+    else if (m_lineTypeDefinition.has_value() &&
+             m_lineTypeDefinition->key() !=
+                 LC_LineTypeNames::foldName(m_currentPen->getLineTypeName())) {
+        // A remembered definition of another name would describe a line type
+        // this pen does not name.
+        m_lineTypeDefinition.reset();
+    }
 }
