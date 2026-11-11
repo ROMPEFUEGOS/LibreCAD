@@ -235,8 +235,7 @@ QImage paintedIcon(const QIcon& icon, const QSize& size, const qreal ratio) {
     return image;
 }
 
-/// The icon painted where a cell of that size paints it. A scalable picture
-/// rendered at another offset is not bit-identical on every platform.
+/// The icon painted where a cell of that size paints it.
 QImage paintedIconAt(const QIcon& icon, const QSize& cellSize, const QRect& rect, const qreal ratio) {
     QImage image = deviceImage(cellSize, ratio);
     {
@@ -657,8 +656,11 @@ TEST_CASE("The line type cell shows the combo's row",
         const qreal ratio = ratioOf(row);
         const QImage cell = paintCell(view, cellSize, ratio);
         skipUnlessWholePixelRatio(cell);
-        const QImage stock = paintedIconAt(QIcon(QStringLiteral(":linetypes/linetype03.lci")), cellSize,
-                                           iconRect, ratio);
+        // The registry's own icon, the one the cell paints: an icon engine keeps
+        // the pictures of each icon, so another icon of the same file is not
+        // bit-identical on every platform.
+        const QImage stock = paintedIconAt(LC_PenInfoRegistry::instance()->getLineTypeIcon(RS2::DashLine),
+                                           cellSize, iconRect, ratio);
         CHECK(cell.copy(deviceRect(iconRect, ratio)) == stock);
     }
 
