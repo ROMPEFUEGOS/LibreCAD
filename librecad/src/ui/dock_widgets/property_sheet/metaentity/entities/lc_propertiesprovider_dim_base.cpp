@@ -1633,17 +1633,21 @@ void LC_PropertiesProviderDimBase::addLineType_DS(const LC_Property::Names& name
                                                               LC_PropertyContainer* container, QList<LC_PropertyAtomic*>* props) -> void {
         auto* property = new LC_PropertyLineType(container, false);
         property->setNames(n);
-        createDelegatedStorage<RS2::LineType, RS_Dimension>([funGetValue](RS_Dimension* e)-> RS2::LineType {
-                                                                LC_DimStyle* dimStyle = e->getEffectiveCachedDimStyle();
-                                                                return funGetValue(dimStyle);
-                                                            }, [funSetValue](RS2::LineType& l, RS_Dimension* e) -> void {
-                                                                LC_DimStyle* dimStyle = e->getEffectiveDimStyleOverride();
-                                                                funSetValue(l, dimStyle);
-                                                            }, [funGetValue](const RS2::LineType& l, RS_Dimension* e) -> bool {
-                                                                LC_DimStyle* ds = e->getEffectiveCachedDimStyle();
-                                                                const bool equals = l == funGetValue(ds);
-                                                                return equals;
-                                                            }, entity, property);
+        // A dimension style names its line types by enum: the value carries no
+        // name, and the table has no list to offer.
+        createDelegatedStorage<LC_PenLineTypeValue, RS_Dimension>(
+            [funGetValue](RS_Dimension* e)-> LC_PenLineTypeValue {
+                LC_DimStyle* dimStyle = e->getEffectiveCachedDimStyle();
+                return LC_PenLineTypeValue(funGetValue(dimStyle));
+            }, [funSetValue](const LC_PenLineTypeValue& value, RS_Dimension* e) -> void {
+                RS2::LineType lineType = value.lineType();
+                LC_DimStyle* dimStyle = e->getEffectiveDimStyleOverride();
+                funSetValue(lineType, dimStyle);
+            }, [funGetValue](const LC_PenLineTypeValue& value, RS_Dimension* e) -> bool {
+                LC_DimStyle* ds = e->getEffectiveCachedDimStyle();
+                const LC_PenLineTypeValue current(funGetValue(ds));
+                return value == current;
+            }, entity, property);
         if (funGetValue == nullptr) {
             property->setReadOnly();
         }

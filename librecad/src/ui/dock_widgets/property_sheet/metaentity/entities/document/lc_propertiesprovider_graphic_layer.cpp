@@ -147,17 +147,17 @@ void LC_PropertiesProviderGraphicLayer::createLineType(LC_PropertyContainer* con
     auto* layerLineTypeProperty = new LC_PropertyLineType(cont, false);
     layerLineTypeProperty->setViewAttribute(LC_PropertyLineTypeComboboxView::ATTR_SHOW_BY_LAYER, false);
     layerLineTypeProperty->setNames(names);
-    auto funGet = [](const RS_Graphic* e) -> RS2::LineType {
+    auto funGet = [](const RS_Graphic* e) -> LC_PenLineTypeValue {
         const auto layer = e->getActiveLayer();
-        return layer->getPen().getLineType();
+        return LC_PenLineTypeValue(layer->getPen().getLineType());
     };
-    auto funSet = [](const RS2::LineType& linetype, RS_Graphic* e) -> void {
+    auto funSet = [](const LC_PenLineTypeValue& value, RS_Graphic* e) -> void {
         const auto layer = e->getActiveLayer();
         RS_Pen pen = layer->getPen();
-        pen.setLineType(linetype);
+        pen.setLineType(value.lineType());
         updateLayerPen(layer, pen, e);
     };
-    createDirectDelegatedStorage<RS2::LineType, RS_Graphic>(funGet, funSet, graphic, layerLineTypeProperty);
+    createDirectDelegatedStorage<LC_PenLineTypeValue, RS_Graphic>(funGet, funSet, graphic, layerLineTypeProperty);
     cont->addChildProperty(layerLineTypeProperty);
 }
 

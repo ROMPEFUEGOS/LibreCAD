@@ -920,6 +920,7 @@ HEADERS += \
     ui/dock_widgets/property_sheet/properties/layer/lc_property_layer_combobox.h \
     ui/dock_widgets/property_sheet/properties/layer/lc_property_layer_combobox_view.h \
     ui/dock_widgets/property_sheet/properties/linetype/lc_property_linetype.h \
+    ui/dock_widgets/property_sheet/properties/linetype/lc_property_linetype_value.h \
     ui/dock_widgets/property_sheet/properties/linetype/lc_property_linetype_combobox.h \
     ui/dock_widgets/property_sheet/properties/linetype/lc_property_linetype_combobox_view.h \
     ui/dock_widgets/property_sheet/properties/linewidth/lc_property_linewidth.h \

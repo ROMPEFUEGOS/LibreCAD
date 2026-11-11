@@ -102,17 +102,24 @@ void LC_PropertiesProviderActivePen::createLineWidth(LC_PropertyContainer* conta
     auto* layerLineTypeProperty = new LC_PropertyLineType(container, false);
     layerLineTypeProperty->setViewAttribute(LC_PropertyLineTypeComboboxView::ATTR_SHOW_BY_LAYER, true);
     layerLineTypeProperty->setNames(names);
-    auto funGet = [pen]([[maybe_unused]]const RS_Graphic* e) -> RS2::LineType {
-        return pen.getLineType();
+    auto funGet = [pen]([[maybe_unused]]const RS_Graphic* e) -> LC_PenLineTypeValue {
+        return LC_PenLineTypeValue(pen.getLineType());
     };
-    auto funSet = [](const RS2::LineType& linetype, [[maybe_unused]]RS_Graphic* e) -> void {
-        const QG_PenToolBar* penToolBar = QC_ApplicationWindow::getAppWindow()->getPenToolBar();
+    auto funSet = [](const LC_PenLineTypeValue& value, [[maybe_unused]]RS_Graphic* e) -> void {
+        QG_PenToolBar* penToolBar = QC_ApplicationWindow::getAppWindow()->getPenToolBar();
         if (penToolBar != nullptr) {
-            penToolBar->setLineType(linetype);
+            applyLineTypeToToolBar(penToolBar, value);
         }
     };
-    createDirectDelegatedStorage<RS2::LineType, RS_Graphic>(funGet, funSet, nullptr, layerLineTypeProperty);
+    createDirectDelegatedStorage<LC_PenLineTypeValue, RS_Graphic>(funGet, funSet, nullptr, layerLineTypeProperty);
     container->addChildProperty(layerLineTypeProperty);
+}
+
+void LC_PropertiesProviderActivePen::applyLineTypeToToolBar(QG_PenToolBar* toolBar,
+                                                            const LC_PenLineTypeValue& value) {
+    if (toolBar != nullptr) {
+        toolBar->setLineType(value.lineType());
+    }
 }
 
 void LC_PropertiesProviderActivePen::createCommands(LC_PropertyContainer* cont) const {

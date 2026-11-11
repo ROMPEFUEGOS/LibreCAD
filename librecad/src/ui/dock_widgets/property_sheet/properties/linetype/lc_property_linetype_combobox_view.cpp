@@ -30,9 +30,10 @@
 const QByteArray LC_PropertyLineTypeComboboxView::VIEW_NAME = QByteArrayLiteral("LinetypeCombobox");
 const QByteArray LC_PropertyLineTypeComboboxView::ATTR_SHOW_BY_LAYER = QByteArrayLiteral("showByLayer");
 
-void LC_PropertyLineTypeComboboxView::doDrawValueDetails(const QStyle* style, const RS2::LineType& linetype, QPainter& painter,
+void LC_PropertyLineTypeComboboxView::doDrawValueDetails(const QStyle* style, const LC_PenLineTypeValue& value, QPainter& painter,
                                                          const QRect& rect) const {
     QRect textRect = rect;
+    const RS2::LineType linetype = value.lineType();
 
     const auto pensRegistry = LC_PenInfoRegistry::instance();
     const auto lineTypeIcon = pensRegistry->getLineTypeIcon(linetype);

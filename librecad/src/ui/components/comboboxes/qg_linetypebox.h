@@ -44,6 +44,14 @@ class LC_LineTypeList;
 class QG_LineTypeBox : public QComboBox {
     Q_OBJECT
 public:
+    /// The picture and the text a combo given this list shows for a pen's
+    /// line type where the drawing decides them. A null icon or an empty text
+    /// means the stock picture or text of the pen's enum.
+    struct RowLook {
+        QIcon icon;
+        QString text;
+    };
+
     explicit QG_LineTypeBox(QWidget* parent = nullptr);
     QG_LineTypeBox(bool showByLayer, bool showUnchanged, QWidget* parent = nullptr, const char* name = nullptr);
     ~QG_LineTypeBox() override;
@@ -73,6 +81,10 @@ public:
     std::optional<LC_LineType> definitionOf(const RS_Pen& pen) const;
     /// Paints the By Layer row with the picture of the row this layer pen selects.
     void setLayerLineTypeOf(const RS_Pen& layerPen);
+    static RowLook rowLookOf(const LC_LineTypeList* list, const RS_Pen& pen,
+                             const QPalette& palette, qreal devicePixelRatio, const QFont& font);
+    /// The icon size of a combo that has a drawing's list.
+    static QSize listIconSize();
 
     bool isUnchanged() const {
         return m_unchanged;

@@ -865,6 +865,18 @@ void QG_LineTypeBox::setLayerLineTypeOf(const RS_Pen& layerPen) {
     slotLineTypeChanged(currentIndex());
 }
 
+QG_LineTypeBox::RowLook QG_LineTypeBox::rowLookOf([[maybe_unused]] const LC_LineTypeList* list,
+                                                   [[maybe_unused]] const RS_Pen& pen,
+                                                   [[maybe_unused]] const QPalette& palette,
+                                                   [[maybe_unused]] const qreal devicePixelRatio,
+                                                   [[maybe_unused]] const QFont& font) {
+    return RowLook();
+}
+
+QSize QG_LineTypeBox::listIconSize() {
+    return kPreviewIconSize;
+}
+
 /**
  * Sets the currently selected linetype item to the given linetype.
  */

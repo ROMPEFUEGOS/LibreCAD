@@ -25,6 +25,9 @@
 #define LC_PROPERTIESPROVIDERACTIVEPEN_H
 
 #include "lc_propertiesprovider_graphic_component.h"
+#include "lc_property_linetype_value.h"
+
+class QG_PenToolBar;
 
 class LC_PropertiesProviderActivePen: public LC_PropertiesProviderGenericComponent {
     Q_OBJECT
@@ -34,6 +37,8 @@ public:
     }
     static const QString SECTION_ACTIVE_PEN;
     void fillDocumentProperties(LC_PropertyContainer* container) override;
+    /// Hands the toolbar a line type value; in this state the enum only.
+    static void applyLineTypeToToolBar(QG_PenToolBar* toolBar, const LC_PenLineTypeValue& value);
 
 protected:
     void createColor(LC_PropertyContainer* container, const RS_Pen& pen) const;

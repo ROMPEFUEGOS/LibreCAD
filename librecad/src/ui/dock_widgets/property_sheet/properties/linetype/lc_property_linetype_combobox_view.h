@@ -42,7 +42,7 @@ public:
 protected:
     void doApplyAttributes(const LC_PropertyViewDescriptor& info) override;
     QComboBox* doCreateEditCombobox(QWidget* parent) override;
-    void doDrawValueDetails(const QStyle* style, const RS2::LineType& linetype, QPainter& painter, const QRect& rect) const override;
+    void doDrawValueDetails(const QStyle* style, const LC_PenLineTypeValue& value, QPainter& painter, const QRect& rect) const override;
     bool m_showByLayer = true;
 };
 

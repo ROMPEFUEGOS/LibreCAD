@@ -1345,3 +1345,84 @@ TEST_CASE("Local preview pictures", "[.][fixture][linetype-preview-shots]") {
     box.hidePopup();
     QCoreApplication::processEvents();
 }
+
+TEST_CASE("The row look matches the combo's row", "[gui][linetype][combo]") {
+    (void)lc::test::application();
+    RS_Graphic graphic;
+    graphic.initForNewDocument();
+    addLineType(graphic, "VENDOR_TAB", {10.0, -5.0});
+    addLineType(graphic, "VENDOR_BARE", {});
+    addLineType(graphic, "DASHED", {64.0, -32.0});
+
+    QG_LineTypeBox box;
+    box.init(&graphic.getLineTypeList(), true, false);
+    const LC_LineTypeList* list = &graphic.getLineTypeList();
+    REQUIRE(QG_LineTypeBox::listIconSize() == box.iconSize());
+
+    const auto look = [&box, list](const RS_Pen& pen) {
+        return QG_LineTypeBox::rowLookOf(list, pen, box.palette(), box.devicePixelRatioF(),
+                                         box.font());
+    };
+    // Compare device pixels, and only pictures of one device pixel ratio.
+    const auto samePicture = [](const QPixmap& left, const QPixmap& right) {
+        const QImage leftImage = left.toImage();
+        const QImage rightImage = right.toImage();
+        return pixelRatio(leftImage) == pixelRatio(rightImage) && leftImage == rightImage;
+    };
+    // The drawing decides the row: the icon and the text are the combo's own.
+    const auto compareDrawnRow = [&box, &look, &samePicture](const RS_Pen& pen) {
+        box.setLineTypeOf(pen);
+        const int row = box.currentIndex();
+        REQUIRE(row >= 0);
+        const QG_LineTypeBox::RowLook result = look(pen);
+        CHECK(!result.icon.isNull());
+        CHECK(samePicture(result.icon.pixmap(QG_LineTypeBox::listIconSize()),
+                          box.itemIcon(row).pixmap(QG_LineTypeBox::listIconSize())));
+        CHECK(result.text == box.itemText(row));
+    };
+    // A stock row the host draws itself: nothing to tell it.
+    const auto compareStockRow = [&box, &look](const RS_Pen& pen) {
+        box.setLineTypeOf(pen);
+        REQUIRE(box.currentIndex() >= 0);
+        const QG_LineTypeBox::RowLook result = look(pen);
+        CHECK(result.icon.isNull());
+        CHECK(result.text.isEmpty());
+    };
+
+    // A drawing row, through another spelling too.
+    compareDrawnRow(namedPen(QStringLiteral("VENDOR_TAB")));
+    compareDrawnRow(namedPen(QStringLiteral("vendor_tab")));
+    // The temporary row, the drawing's row of a redefined built-in, and a
+    // record that only names a line type.
+    compareDrawnRow(namedPen(QStringLiteral("VENDOR_GONE")));
+    compareDrawnRow(namedPen(QStringLiteral("DASHED")));
+    compareDrawnRow(namedPen(QStringLiteral("VENDOR_BARE")));
+
+    // A stock row the drawing paints from its own record: the icon is the
+    // drawing's, the text stays the stock row's, which the host has.
+    const RS_Pen redefinedBuiltIn(RS_Color(Qt::black), RS2::Width00, RS2::DashLine);
+    box.setLineTypeOf(redefinedBuiltIn);
+    const int redefinedRow = box.currentIndex();
+    REQUIRE(redefinedRow >= 0);
+    const QG_LineTypeBox::RowLook redefinedLook = look(redefinedBuiltIn);
+    CHECK(!redefinedLook.icon.isNull());
+    CHECK(samePicture(redefinedLook.icon.pixmap(QG_LineTypeBox::listIconSize()),
+                      box.itemIcon(redefinedRow).pixmap(QG_LineTypeBox::listIconSize())));
+    CHECK(redefinedLook.text.isEmpty());
+    CHECK(box.itemText(redefinedRow) == QG_LineTypeBox::tr("Dash"));
+
+    // Plain stock rows, and any pen a combo without a list is shown: no icon,
+    // no text.
+    compareStockRow(RS_Pen(RS_Color(Qt::black), RS2::Width00, RS2::DotLine));
+    compareStockRow(RS_Pen(RS_Color(Qt::black), RS2::Width00, RS2::LineByLayer));
+    compareStockRow(RS_Pen(RS_Color(Qt::black), RS2::Width00, RS2::LineByBlock));
+    for (const RS_Pen& pen : {namedPen(QStringLiteral("VENDOR_TAB")),
+                              RS_Pen(RS_Color(Qt::black), RS2::Width00, RS2::DashLine),
+                              RS_Pen(RS_Color(Qt::black), RS2::Width00, RS2::LineByLayer)}) {
+        const QG_LineTypeBox::RowLook result =
+            QG_LineTypeBox::rowLookOf(nullptr, pen, box.palette(), box.devicePixelRatioF(),
+                                      box.font());
+        CHECK(result.icon.isNull());
+        CHECK(result.text.isEmpty());
+    }
+}

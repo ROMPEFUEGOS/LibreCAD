@@ -229,15 +229,14 @@ void LC_EntityTypePropertiesProvider::fillGenericAttributes(LC_PropertyContainer
                      QList<LC_PropertyAtomic*>* props) -> void {
                   auto* property = new LC_PropertyLineType(cont, false);
                   property->setNames(names);
-                  createDelegatedStorage([](const RS_Entity* e) -> RS2::LineType {
-                                             return e->getPen(false).getLineType();
-                                         }, [](const RS2::LineType& linetype, const RS_Entity* e) -> void {
+                  createDelegatedStorage([](const RS_Entity* e) -> LC_PenLineTypeValue {
+                                             return LC_PenLineTypeValue(e->getPen(false).getLineType());
+                                         }, [](const LC_PenLineTypeValue& value, const RS_Entity* e) -> void {
                                              RS_Pen pen = e->getPen(false);
-                                             pen.setLineType(linetype);
+                                             pen.setLineType(value.lineType());
                                              e->setPen(pen);
-                                         }, [](const RS2::LineType& l, const RS_Entity* e) -> bool {
-                                             const bool equals = l == e->getPen(false).getLineType();
-                                             return equals;
+                                         }, [](const LC_PenLineTypeValue& l, const RS_Entity* e) -> bool {
+                                             return l == LC_PenLineTypeValue(e->getPen(false).getLineType());
                                          }, entity, property);
                   props->push_back(property);
               }, list, containerGeneric);

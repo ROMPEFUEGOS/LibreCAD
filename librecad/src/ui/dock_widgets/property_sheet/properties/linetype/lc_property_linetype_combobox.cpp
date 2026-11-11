@@ -44,8 +44,7 @@ void LC_PropertyLineTypeCombobox::updateByProperty() {
     m_updating++;
     const auto stateProperty = m_view->getStateProperty();
     setEnabled(stateProperty->isEditableByUser());
-    const RS2::LineType linetype = m_property->value();
-    setLineType(linetype);
+    setLineType(m_property->value().lineType());
     m_updating--;
 }
 
@@ -59,5 +58,5 @@ void LC_PropertyLineTypeCombobox::onLinetypeChanged(const RS2::LineType& linetyp
     if (m_updating) {
         return;
     }
-    m_property->setValue(linetype, m_view->changeReasonDueToEdit());
+    m_property->setValue(LC_PenLineTypeValue(linetype), m_view->changeReasonDueToEdit());
 }

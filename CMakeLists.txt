@@ -1935,6 +1935,7 @@ set (SHARED_SOURCES
      librecad/src/ui/dock_widgets/property_sheet/properties/lc_property_view_registrator.cpp
      librecad/src/ui/dock_widgets/property_sheet/properties/lc_property_view_registrator.h
      librecad/src/ui/dock_widgets/property_sheet/properties/linetype/lc_property_linetype.h
+     librecad/src/ui/dock_widgets/property_sheet/properties/linetype/lc_property_linetype_value.h
      librecad/src/ui/dock_widgets/property_sheet/properties/linetype/lc_property_linetype_combobox.cpp
      librecad/src/ui/dock_widgets/property_sheet/properties/linetype/lc_property_linetype_combobox.h
      librecad/src/ui/dock_widgets/property_sheet/properties/linetype/lc_property_linetype_combobox_view.cpp
@@ -2842,6 +2843,7 @@ if (BUILD_TESTS)
         librecad/src/ui/dock_widgets/property_sheet/tests/lc_layerstateproperties_tests.cpp
         librecad/src/ui/dock_widgets/property_sheet/tests/lc_propertysheet_polyline_closed_tests.cpp
         librecad/src/ui/dock_widgets/property_sheet/tests/lc_property_copy_tests.cpp
+        librecad/src/ui/dock_widgets/property_sheet/tests/lc_property_linetype_tests.cpp
         librecad/src/ui/dock_widgets/property_sheet/tests/lc_propertysheetarctests.cpp
         librecad/src/actions/dock_widgets/block/tests/lc_actionblockssave_tests.cpp
         librecad/src/ui/dock_widgets/ucs_list/tests/lc_ucslistmodel_tests.cpp
@@ -3562,6 +3564,7 @@ if (BUILD_TESTS)
         librecad_linetype_ui_tests
         librecad/src/ui/components/comboboxes/tests/qg_linetypebox_tests.cpp)
     target_sources(librecad_linetype_ui_tests PRIVATE
+        librecad/src/ui/dock_widgets/property_sheet/tests/lc_property_linetype_tests.cpp
         librecad/src/ui/components/pen/tests/qg_widgetpen_tests.cpp
         librecad/src/ui/components/toolbars/tests/qg_pentoolbar_tests.cpp
         librecad/src/ui/dialogs/entity/tests/lc_entity_dialog_linetype_tests.cpp
