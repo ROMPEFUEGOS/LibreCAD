@@ -235,6 +235,17 @@ QImage paintedIcon(const QIcon& icon, const QSize& size, const qreal ratio) {
     return image;
 }
 
+/// The icon painted where a cell of that size paints it. A scalable picture
+/// rendered at another offset is not bit-identical on every platform.
+QImage paintedIconAt(const QIcon& icon, const QSize& cellSize, const QRect& rect, const qreal ratio) {
+    QImage image = deviceImage(cellSize, ratio);
+    {
+        QPainter painter(&image);
+        icon.paint(&painter, rect);
+    }
+    return image.copy(deviceRect(rect, ratio));
+}
+
 /// Runs the event loop in short slices until the sheet has committed the edit
 /// it was given, or gives up. The sheet applies an edit through a timer.
 bool waitForSheet(const std::function<bool()>& condition, const int timeoutMs = 5000) {
@@ -646,8 +657,8 @@ TEST_CASE("The line type cell shows the combo's row",
         const qreal ratio = ratioOf(row);
         const QImage cell = paintCell(view, cellSize, ratio);
         skipUnlessWholePixelRatio(cell);
-        const QImage stock = paintedIcon(QIcon(QStringLiteral(":linetypes/linetype03.lci")), iconSize,
-                                         ratio);
+        const QImage stock = paintedIconAt(QIcon(QStringLiteral(":linetypes/linetype03.lci")), cellSize,
+                                           iconRect, ratio);
         CHECK(cell.copy(deviceRect(iconRect, ratio)) == stock);
     }
 
