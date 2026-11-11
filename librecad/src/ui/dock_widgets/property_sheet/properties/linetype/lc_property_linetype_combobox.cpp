@@ -29,6 +29,8 @@ LC_PropertyLineTypeCombobox::LC_PropertyLineTypeCombobox(LC_PropertyLineTypeComb
                                                          const bool showUnchanged)
     : QG_LineTypeBox(showByLayer, showUnchanged, parent), m_view(view), m_property(static_cast<LC_PropertyLineType*>(view->getProperty())) {
     setLineEdit(nullptr);
+    // The drawing's rows come first: the value may name one of them.
+    rebuild(m_property->lineTypeList());
     updateByProperty();
 
     connect(m_property, &LC_Property::afterPropertyChange, this, &LC_PropertyLineTypeCombobox::onPropertyDidChange);
@@ -44,7 +46,8 @@ void LC_PropertyLineTypeCombobox::updateByProperty() {
     m_updating++;
     const auto stateProperty = m_view->getStateProperty();
     setEnabled(stateProperty->isEditableByUser());
-    setLineType(m_property->value().lineType());
+    // The pen view selects a drawing row by its name, a stock row by its enum.
+    setLineTypeOf(m_property->value().pen());
     m_updating--;
 }
 
@@ -54,9 +57,13 @@ void LC_PropertyLineTypeCombobox::onPropertyDidChange(const LC_PropertyChangeRea
     }
 }
 
-void LC_PropertyLineTypeCombobox::onLinetypeChanged(const RS2::LineType& linetype) {
+void LC_PropertyLineTypeCombobox::onLinetypeChanged([[maybe_unused]] const RS2::LineType& linetype) {
     if (m_updating) {
         return;
     }
-    m_property->setValue(LC_PenLineTypeValue(linetype), m_view->changeReasonDueToEdit());
+    // The row holds the whole line type: the name a drawing row writes and the
+    // enum of a stock row.
+    RS_Pen pen = m_property->value().pen();
+    applyLineTypeTo(pen);
+    m_property->setValue(LC_PenLineTypeValue(pen), m_view->changeReasonDueToEdit());
 }

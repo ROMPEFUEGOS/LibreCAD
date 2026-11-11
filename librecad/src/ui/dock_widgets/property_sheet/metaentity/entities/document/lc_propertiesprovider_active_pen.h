@@ -37,7 +37,8 @@ public:
     }
     static const QString SECTION_ACTIVE_PEN;
     void fillDocumentProperties(LC_PropertyContainer* container) override;
-    /// Hands the toolbar a line type value; in this state the enum only.
+    /// Hands the toolbar a whole pen, as the sheet's edit does: the row and the
+    /// name follow the pen, and its definition is remembered for the next drawing.
     static void applyLineTypeToToolBar(QG_PenToolBar* toolBar, const LC_PenLineTypeValue& value);
 
 protected:

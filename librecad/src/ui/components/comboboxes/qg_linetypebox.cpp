@@ -283,6 +283,24 @@ QIcon modeIconFor(const std::vector<double>* pattern, const QSize& logical, cons
     }
     return icon;
 }
+
+/// The rows the table adds: a spelling of its own or a built-in it redefines.
+bool isDisplayedEntry(const LC_LineType& entry) {
+    const QString canonical = LC_LineTypeNames::lineTypeToName(
+        LC_LineTypeNames::nameToLineType(entry.name));
+    // key() is already the fold of the name.
+    const bool ownSpelling = entry.key() != LC_LineTypeNames::foldName(canonical);
+    return ownSpelling || LC_LineTypeList::redefinesBuiltIn(entry);
+}
+
+bool isCanonicalNameFor(const QString& name, const RS2::LineType type) {
+    return LC_LineTypeNames::foldName(name.trimmed()) ==
+           LC_LineTypeNames::foldName(LC_LineTypeNames::lineTypeToName(type));
+}
+
+QString temporaryRowText(const QString& name) {
+    return QCoreApplication::translate("QG_LineTypeBox", "%1 (not in this drawing)").arg(name);
+}
 }
 
 /**
@@ -407,12 +425,9 @@ void QG_LineTypeBox::fillRows(const LC_LineTypeList* list) {
         if (entry == nullptr) {
             continue;
         }
-        const QString canonical = LC_LineTypeNames::lineTypeToName(
-            LC_LineTypeNames::nameToLineType(entry->name));
-        // key() is already the fold of the name. A built-in the record redefines
-        // is one of the drawing's rows too, beside its stock row.
-        const bool ownSpelling = entry->key() != LC_LineTypeNames::foldName(canonical);
-        if (!ownSpelling && !LC_LineTypeList::redefinesBuiltIn(*entry)) {
+        // A built-in the record redefines is one of the drawing's rows too,
+        // beside its stock row.
+        if (!isDisplayedEntry(*entry)) {
             continue;
         }
         rows.push_back(entry);
@@ -664,8 +679,7 @@ int QG_LineTypeBox::indexForRowOfName(const QString& name, const RS2::LineType t
 }
 
 bool QG_LineTypeBox::isCanonicalName(const QString& name, const RS2::LineType type) const {
-    return LC_LineTypeNames::foldName(name.trimmed()) ==
-           LC_LineTypeNames::foldName(LC_LineTypeNames::lineTypeToName(type));
+    return isCanonicalNameFor(name, type);
 }
 
 void QG_LineTypeBox::removeTemporaryRow() {
@@ -697,7 +711,7 @@ void QG_LineTypeBox::removeTemporaryRow() {
 int QG_LineTypeBox::appendTemporaryRow(const QString& name, const RS2::LineType type) {
     // The temporary row is the last of the drawing's rows, before the separator.
     const int index = m_hasSeparator ? m_builtInStart - 1 : m_builtInStart;
-    insertItem(index, missingIcon(), tr("%1 (not in this drawing)").arg(name));
+    insertItem(index, missingIcon(), temporaryRowText(name));
     setItemData(index, static_cast<int>(type), LineTypeRole);
     setItemData(index, name, LineTypeNameRole);
     setItemData(index, TemporaryRow, LineTypeRowKindRole);
@@ -865,12 +879,35 @@ void QG_LineTypeBox::setLayerLineTypeOf(const RS_Pen& layerPen) {
     slotLineTypeChanged(currentIndex());
 }
 
-QG_LineTypeBox::RowLook QG_LineTypeBox::rowLookOf([[maybe_unused]] const LC_LineTypeList* list,
-                                                   [[maybe_unused]] const RS_Pen& pen,
-                                                   [[maybe_unused]] const QPalette& palette,
-                                                   [[maybe_unused]] const qreal devicePixelRatio,
-                                                   [[maybe_unused]] const QFont& font) {
-    return RowLook();
+QG_LineTypeBox::RowLook QG_LineTypeBox::rowLookOf(const LC_LineTypeList* list, const RS_Pen& pen,
+                                                   const QPalette& palette, const qreal devicePixelRatio,
+                                                   const QFont& font) {
+    RowLook look;
+    if (list == nullptr) {
+        return look;
+    }
+    const QString name = pen.hasLineTypeName() ? pen.getLineTypeName() : QString();
+    if (!name.isEmpty()) {
+        const LC_LineType* entry = list->find(name);
+        if (entry != nullptr && isDisplayedEntry(*entry)) {
+            look.icon = modeIconFor(&entry->pattern, kPreviewIconSize, devicePixelRatio, palette, font);
+            look.text = entry->name;
+            return look;
+        }
+        if (!isCanonicalNameFor(name, pen.getLineType())) {
+            // The drawing does not define the name: the temporary row.
+            look.icon = modeIconFor(nullptr, kPreviewIconSize, devicePixelRatio, palette, font);
+            look.text = temporaryRowText(name);
+            return look;
+        }
+    }
+    // A stock row whose built-in the drawing redefines: the combo paints that
+    // row from the drawing's record, and the text stays the stock row's.
+    const LC_LineType* record = list->find(LC_LineTypeNames::lineTypeToName(pen.getLineType()));
+    if (record != nullptr && LC_LineTypeList::redefinesBuiltIn(*record)) {
+        look.icon = modeIconFor(&record->pattern, kPreviewIconSize, devicePixelRatio, palette, font);
+    }
+    return look;
 }
 
 QSize QG_LineTypeBox::listIconSize() {

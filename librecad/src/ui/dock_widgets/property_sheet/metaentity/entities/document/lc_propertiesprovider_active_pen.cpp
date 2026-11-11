@@ -33,6 +33,7 @@
 #include "qc_applicationwindow.h"
 #include "qg_pentoolbar.h"
 #include "rs_document.h"
+#include "rs_graphic.h"
 #include "rs_pen.h"
 
 const QString LC_PropertiesProviderActivePen::SECTION_ACTIVE_PEN = "_secActivePen";
@@ -102,14 +103,14 @@ void LC_PropertiesProviderActivePen::createLineWidth(LC_PropertyContainer* conta
     auto* layerLineTypeProperty = new LC_PropertyLineType(container, false);
     layerLineTypeProperty->setViewAttribute(LC_PropertyLineTypeComboboxView::ATTR_SHOW_BY_LAYER, true);
     layerLineTypeProperty->setNames(names);
+    const RS_Document* doc = m_actionContext != nullptr ? m_actionContext->getDocument() : nullptr;
+    const RS_Graphic* graphic = doc != nullptr ? doc->getGraphic() : nullptr;
+    layerLineTypeProperty->setLineTypeList(graphic != nullptr ? &graphic->getLineTypeList() : nullptr);
     auto funGet = [pen]([[maybe_unused]]const RS_Graphic* e) -> LC_PenLineTypeValue {
-        return LC_PenLineTypeValue(pen.getLineType());
+        return LC_PenLineTypeValue(pen);
     };
     auto funSet = [](const LC_PenLineTypeValue& value, [[maybe_unused]]RS_Graphic* e) -> void {
-        QG_PenToolBar* penToolBar = QC_ApplicationWindow::getAppWindow()->getPenToolBar();
-        if (penToolBar != nullptr) {
-            applyLineTypeToToolBar(penToolBar, value);
-        }
+        applyLineTypeToToolBar(QC_ApplicationWindow::getAppWindow()->getPenToolBar(), value);
     };
     createDirectDelegatedStorage<LC_PenLineTypeValue, RS_Graphic>(funGet, funSet, nullptr, layerLineTypeProperty);
     container->addChildProperty(layerLineTypeProperty);
@@ -118,7 +119,8 @@ void LC_PropertiesProviderActivePen::createLineWidth(LC_PropertyContainer* conta
 void LC_PropertiesProviderActivePen::applyLineTypeToToolBar(QG_PenToolBar* toolBar,
                                                             const LC_PenLineTypeValue& value) {
     if (toolBar != nullptr) {
-        toolBar->setLineType(value.lineType());
+        // The whole pen, so a name reaches the toolbar's row and its memory.
+        toolBar->setLineType(value.pen());
     }
 }
 
