@@ -130,6 +130,9 @@ void LC_DimStylePreviewGraphicView::copyBlocks(RS_Graphic* originalGraphic, LC_P
 LC_DimStylePreviewGraphicView* LC_DimStylePreviewGraphicView::init(QWidget* parent,RS_Graphic* originalGraphic, const RS2::EntityType dimensionType) {
     const auto graphic = new LC_PreviewGraphic();
     graphic->initForNewDocument();
+    // A style can name a line type only its drawing defines; the preview
+    // otherwise falls back to the enum's built-in dashes.
+    graphic->mergeLineTypes(*originalGraphic);
     copyBlocks(originalGraphic, graphic);
 
     const bool loaded = RS_FileIO::instance()->fileImport(*graphic, ":/dxf/dim_sample.dxf", RS2::FormatUnknown);
@@ -148,6 +151,7 @@ LC_DimStylePreviewGraphicView* LC_DimStylePreviewGraphicView::init(QWidget* pare
 LC_DimStylePreviewGraphicView* LC_DimStylePreviewGraphicView::init(QWidget* parent, RS_Graphic* originalGraphic, const RS_Dimension* dimension) {
     const auto graphic = new LC_PreviewGraphic();
     graphic->initForNewDocument();
+    graphic->mergeLineTypes(*originalGraphic);
 
     const auto clone = dimension->clone();
     graphic->getDocument()->addEntity(clone);

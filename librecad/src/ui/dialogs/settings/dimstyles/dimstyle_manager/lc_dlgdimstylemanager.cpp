@@ -37,13 +37,30 @@
 #include "lc_tabproxywidget.h"
 #include "qg_dlgoptionsdrawing.h"
 #include "qg_graphicview.h"
+#include "qg_linetypebox.h"
 #include "rs_fileio.h"
 #include "rs_filterdxfrw.h"
 #include "rs_font.h"
+#include "rs_pen.h"
 #include "ui_lc_dlgdimstylemanager.h"
 
 #define CUSTOM_BLOCK_NAME "_CUSTOM"
 #define CUSTOM_SELECT_BLOCK_NAME "_CUSTOM_SELECT"
+
+namespace {
+// A pen that carries a style's raw line type name, or only the enum when the
+// name is empty, so the combo selects the row the style means.
+RS_Pen penForLineType(const QString& name, const RS2::LineType lineType) {
+    RS_Pen pen;
+    if (name.isEmpty()) {
+        pen.setLineType(lineType);
+    }
+    else {
+        pen.setLineTypeName(name);
+    }
+    return pen;
+}
+}
 
 /**
  *
@@ -242,7 +259,15 @@ void LC_DlgDimStyleManager::onDimLineColorChanged(const RS_Color& color) const {
 }
 
 void LC_DlgDimStyleManager::onDimLineTypeChanged(const RS2::LineType lineType) const {
-    m_dimStyle->dimensionLine()->setLineType(lineType);
+    RS_Pen pen;
+    ui->cbDimLineLineType->applyLineTypeTo(pen);
+    if (pen.hasLineTypeName()) {
+        // A drawing row keeps its spelling; the enum cannot carry it.
+        m_dimStyle->dimensionLine()->setLineType(pen.getLineTypeName());
+    }
+    else {
+        m_dimStyle->dimensionLine()->setLineType(lineType);
+    }
     refreshPreview();
 }
 
@@ -277,12 +302,26 @@ void LC_DlgDimStyleManager::onExtLineColorChanged(const RS_Color& color) const {
 }
 
 void LC_DlgDimStyleManager::onExtLineType1Changed(const RS2::LineType lineType) const {
-    m_dimStyle->extensionLine()->setLineTypeFirst(lineType);
+    RS_Pen pen;
+    ui->cbExtLineType1->applyLineTypeTo(pen);
+    if (pen.hasLineTypeName()) {
+        m_dimStyle->extensionLine()->setLineTypeFirst(pen.getLineTypeName());
+    }
+    else {
+        m_dimStyle->extensionLine()->setLineTypeFirst(lineType);
+    }
     refreshPreview();
 }
 
 void LC_DlgDimStyleManager::onExtLineType2Changed(const RS2::LineType lineType) const {
-    m_dimStyle->extensionLine()->setLineTypeSecond(lineType);
+    RS_Pen pen;
+    ui->cbExtLineType2->applyLineTypeTo(pen);
+    if (pen.hasLineTypeName()) {
+        m_dimStyle->extensionLine()->setLineTypeSecond(pen.getLineTypeName());
+    }
+    else {
+        m_dimStyle->extensionLine()->setLineTypeSecond(lineType);
+    }
     refreshPreview();
 }
 
@@ -1111,9 +1150,11 @@ void LC_DlgDimStyleManager::init(const RS2::EntityType dimensionType) {
     ui->cbDimLineWidth->init(true, false);
     ui->cbExtLineWidth->init(true, false);
 
-    ui->cbDimLineLineType->init(true, false);
-    ui->cbExtLineType1->init(true, false);
-    ui->cbExtLineType2->init(true, false);
+    // The drawing can define line types the built-in rows do not name.
+    const auto lineTypeList = &m_originalGraphic->getLineTypeList();
+    ui->cbDimLineLineType->init(lineTypeList, true, false);
+    ui->cbExtLineType1->init(lineTypeList, true, false);
+    ui->cbExtLineType2->init(lineTypeList, true, false);
 
     // unit comboboxes
 
@@ -1384,7 +1425,7 @@ void LC_DlgDimStyleManager::connectToleranceTab() {
 
 void LC_DlgDimStyleManager::fillLinesTab(const LC_DimStyle* dimStyle, const LC_DimStyle::DimensionLine* dimLine) const {
     ui->cbDimLineColor->setColor(dimLine->color());
-    ui->cbDimLineLineType->setLineType(dimLine->lineType());
+    ui->cbDimLineLineType->setLineTypeOf(penForLineType(dimLine->lineTypeName(), dimLine->lineType()));
     ui->cbDimLineWidth->setWidth(dimLine->lineWidth());
 
     ui->dsbDimLineExtendBeyond->setValue(dimLine->distanceBeyondExtLinesForObliqueStroke());
@@ -1396,8 +1437,8 @@ void LC_DlgDimStyleManager::fillLinesTab(const LC_DimStyle* dimStyle, const LC_D
     const auto extLine = dimStyle->extensionLine();
 
     ui->cbExtLineColor->setColor(extLine->color());
-    ui->cbExtLineType1->setLineType(extLine->lineTypeFirst());
-    ui->cbExtLineType2->setLineType(extLine->lineTypeSecond());
+    ui->cbExtLineType1->setLineTypeOf(penForLineType(extLine->lineTypeFirstRaw(), extLine->lineTypeFirst()));
+    ui->cbExtLineType2->setLineTypeOf(penForLineType(extLine->lineTypeSecondRaw(), extLine->lineTypeSecond()));
     ui->cbExtLineWidth->setWidth(extLine->lineWidth());
 
     ui->bsbExtLineBeyondDimLine->setValue(extLine->distanceBeyondDimLine());
