@@ -114,6 +114,10 @@ QString RS_Pen::getLineTypeName() const {
     return LC_LineTypeNames::lineTypeToName(m_lineType);
 }
 
+QString RS_Pen::getEffectiveLineTypeName() const {
+    return LC_LineTypeNames::lineTypeToName(getLineType());
+}
+
 std::ostream& operator << (std::ostream& os, const RS_Pen& p) {
     //os << "style: " << p.style << std::endl;
     os << " pen color: " << p.getColor()

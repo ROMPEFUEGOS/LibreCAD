@@ -91,6 +91,10 @@ public:
     /// The spelling this pen was given, or the canonical name of its enum.
     QString getLineTypeName() const;
 
+    /// The folded name that identifies this pen's line type. The enum alone
+    /// cannot tell a drawing's line type from a built-in with the same dashes.
+    QString getEffectiveLineTypeName() const;
+
     /// This pen's spelling as an opaque, process-local token; 0 if it has none.
     std::uint16_t getLineTypeId() const {
         return m_lineTypeId;
