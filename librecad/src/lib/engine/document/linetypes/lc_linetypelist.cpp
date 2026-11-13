@@ -103,6 +103,38 @@ LC_LineType* LC_LineTypeList::find(const QString& name) const {
     return nullptr;
 }
 
+// The canonical spelling of a built-in row is LibreCAD's own, and a file does
+// not replace it. An alias such as ACAD_ISO02W100 is a line type a drawing
+// may hold of its own, so a file may bring it.
+bool LC_LineTypeList::isBuiltInName(const QString& name) {
+    const QString key = LC_LineTypeNames::foldName(name);
+    if (key == QStringLiteral("BYLAYER") || key == QStringLiteral("BYBLOCK")) {
+        return true;
+    }
+    if (!LC_LineTypeNames::isKnownName(name)) {
+        return false;
+    }
+    const RS2::LineType type = LC_LineTypeNames::nameToLineType(name);
+    return key ==
+           LC_LineTypeNames::foldName(LC_LineTypeNames::lineTypeToName(type));
+}
+
+bool LC_LineTypeList::remove(const QString& name) {
+    (void)name;
+    return false;
+}
+
+bool LC_LineTypeList::rename(const QString& oldName, const QString& newName) {
+    (void)oldName;
+    (void)newName;
+    return false;
+}
+
+bool LC_LineTypeList::isRemoved(const QString& name) const {
+    (void)name;
+    return false;
+}
+
 LC_LineType* LC_LineTypeList::add(LC_LineType* entry) {
     if (entry == nullptr || m_entries.contains(entry)) {
         return entry;

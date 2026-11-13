@@ -32,6 +32,7 @@
 #include <QStringConverter>
 #include <QStringList>
 
+#include "lc_linetypelist.h"
 #include "lc_linetypenames.h"
 
 namespace {
@@ -81,22 +82,6 @@ QString bracketedField(const QString& line) {
         end = line.size();
     }
     return line.mid(start, end - start).trimmed();
-}
-
-// The canonical spelling of a built-in row is LibreCAD's own, and a file does
-// not replace it. An alias such as ACAD_ISO02W100 is a line type a drawing
-// may hold of its own, so a file may bring it.
-bool isBuiltInName(const QString& name) {
-    const QString key = LC_LineTypeNames::foldName(name);
-    if (key == QStringLiteral("BYLAYER") || key == QStringLiteral("BYBLOCK")) {
-        return true;
-    }
-    if (!LC_LineTypeNames::isKnownName(name)) {
-        return false;
-    }
-    const RS2::LineType type = LC_LineTypeNames::nameToLineType(name);
-    return key ==
-           LC_LineTypeNames::foldName(LC_LineTypeNames::lineTypeToName(type));
 }
 
 void appendIssue(LC_LinFile::ReadResult& result, LC_LinFile::Issue::Kind kind,
@@ -211,7 +196,7 @@ LC_LinFile::ReadResult LC_LinFile::read(const QByteArray& data, double scale) {
             appendIssue(result, Issue::Kind::InvalidName, record.line, record.name);
             continue;
         }
-        if (isBuiltInName(record.name)) {
+        if (LC_LineTypeList::isBuiltInName(record.name)) {
             appendIssue(result, Issue::Kind::BuiltInName, record.line, record.name);
             continue;
         }

@@ -10136,6 +10136,152 @@ TEST_CASE("DXF writes a twin archived spelling as it came beside a changed recor
   std::filesystem::remove(out);
 }
 
+namespace {
+// Two records a drawing may remove or rename, each with its own description.
+const char *const kRemovableLTypeFixture =
+    "0\nSECTION\n2\nHEADER\n9\n$ACADVER\n1\nAC1021\n0\nENDSEC\n"
+    "0\nSECTION\n2\nTABLES\n"
+    "0\nTABLE\n2\nLTYPE\n70\n2\n"
+    "0\nLTYPE\n5\n40\n330\n5\n"
+    "100\nAcDbSymbolTableRecord\n100\nAcDbLinetypeTableRecord\n"
+    "2\nVENDOR_TAB\n70\n0\n3\nTab marks\n72\n65\n73\n2\n40\n15.0\n"
+    "49\n10.0\n49\n-5.0\n"
+    "0\nLTYPE\n5\n41\n330\n5\n"
+    "100\nAcDbSymbolTableRecord\n100\nAcDbLinetypeTableRecord\n"
+    "2\nVENDOR_DOT\n70\n0\n3\nDot marks\n72\n65\n73\n2\n40\n5.0\n"
+    "49\n0.0\n49\n-5.0\n"
+    "0\nENDTAB\n0\nENDSEC\n"
+    "0\nSECTION\n2\nENTITIES\n0\nENDSEC\n0\nEOF\n";
+
+void importRemovableLTypes(RS_Graphic &graphic) {
+  const std::string src = tmpFile("removable_ltype_src.dxf");
+  writeText(src, kRemovableLTypeFixture);
+  REQUIRE(importFile(graphic, src));
+  std::filesystem::remove(src);
+}
+} // namespace
+
+// The archive keeps every record the file had; the table is what the drawing
+// holds now.
+TEST_CASE("DXF writes no record for a removed line type",
+          "[dxf][roundtrip][filter][linetype][named][table]") {
+  ensureSettings();
+  const std::string out = tmpFile("removed_ltype_out.dxf");
+  RS_Graphic graphic;
+  importRemovableLTypes(graphic);
+  REQUIRE(graphic.findLineType(QStringLiteral("VENDOR_TAB")) != nullptr);
+  REQUIRE(graphic.removeLineType(QStringLiteral("VENDOR_TAB")));
+  CHECK(graphic.isLineTypeRemoved(QStringLiteral("VENDOR_TAB")));
+
+  REQUIRE(exportAs(graphic, out));
+  CHECK(ltypeRecordsSpelt(out, "VENDOR_TAB").empty());
+  CHECK(ltypeRecordsSpelt(out, "VENDOR_DOT") == Records{{0.0, -5.0}});
+  CHECK(ltypeRecordGroupValues(out, "VENDOR_DOT", "3") ==
+        std::vector<std::string>{"Dot marks"});
+
+  RS_Graphic back;
+  REQUIRE(importFile(back, out));
+  CHECK(back.findLineType(QStringLiteral("VENDOR_TAB")) == nullptr);
+  const LC_LineType *dot = importedEntry(back, "VENDOR_DOT");
+  REQUIRE(dot != nullptr);
+  CHECK(dot->pattern == std::vector<double>{0.0, -5.0});
+
+  std::filesystem::remove(out);
+}
+
+#ifdef DWGSUPPORT
+TEST_CASE("DWG writes no record for a removed line type",
+          "[dwg][roundtrip][filter][linetype][named][table]") {
+  ensureSettings();
+  const std::string dwg = tmpFile("removed_ltype_out.dwg");
+  RS_Graphic graphic;
+  importRemovableLTypes(graphic);
+  REQUIRE(graphic.removeLineType(QStringLiteral("VENDOR_TAB")));
+
+  REQUIRE(exportAs(graphic, dwg, RS2::FormatDWG2004));
+  RS_Graphic fromDwg;
+  REQUIRE(importFile(fromDwg, dwg, RS2::FormatDWG));
+  CHECK(fromDwg.findLineType(QStringLiteral("VENDOR_TAB")) == nullptr);
+  const LC_LineType *dot = importedEntry(fromDwg, "VENDOR_DOT");
+  REQUIRE(dot != nullptr);
+  CHECK(dot->pattern == std::vector<double>{0.0, -5.0});
+
+  std::filesystem::remove(dwg);
+}
+#endif
+
+TEST_CASE("DXF writes a renamed line type under its new name only",
+          "[dxf][roundtrip][filter][linetype][named][table]") {
+  ensureSettings();
+  const std::string out = tmpFile("renamed_ltype_out.dxf");
+  RS_Graphic graphic;
+  importRemovableLTypes(graphic);
+  REQUIRE(graphic.renameLineType(QStringLiteral("VENDOR_TAB"),
+                                 QStringLiteral("VENDOR_LONG")));
+  CHECK(graphic.isLineTypeRemoved(QStringLiteral("VENDOR_TAB")));
+  LC_LineType *renamed = graphic.findLineType(QStringLiteral("VENDOR_LONG"));
+  REQUIRE(renamed != nullptr);
+  CHECK(renamed->pattern == std::vector<double>{10.0, -5.0});
+  CHECK(renamed->description == QStringLiteral("Tab marks"));
+
+  REQUIRE(exportAs(graphic, out));
+  CHECK(ltypeRecordsSpelt(out, "VENDOR_TAB").empty());
+  CHECK(ltypeRecordsSpelt(out, "VENDOR_LONG") == Records{{10.0, -5.0}});
+  CHECK(ltypeRecordGroupValues(out, "VENDOR_LONG", "3") ==
+        std::vector<std::string>{"Tab marks"});
+  CHECK(ltypeRecordsSpelt(out, "VENDOR_DOT") == Records{{0.0, -5.0}});
+
+  RS_Graphic back;
+  REQUIRE(importFile(back, out));
+  CHECK(back.findLineType(QStringLiteral("VENDOR_TAB")) == nullptr);
+  const LC_LineType *longEntry = importedEntry(back, "VENDOR_LONG");
+  REQUIRE(longEntry != nullptr);
+  CHECK(longEntry->pattern == std::vector<double>{10.0, -5.0});
+  CHECK(longEntry->description == QStringLiteral("Tab marks"));
+
+  std::filesystem::remove(out);
+}
+
+TEST_CASE("DXF writes a removed and recreated line type once from the table",
+          "[dxf][roundtrip][filter][linetype][named][table]") {
+  ensureSettings();
+  const std::string out = tmpFile("recreated_ltype_out.dxf");
+  RS_Graphic graphic;
+  importRemovableLTypes(graphic);
+  REQUIRE(graphic.removeLineType(QStringLiteral("VENDOR_TAB")));
+  auto *again = new LC_LineType(QStringLiteral("VENDOR_TAB"));
+  again->description = QStringLiteral("Wider tab marks");
+  again->pattern = {20.0, -10.0};
+  REQUIRE(graphic.addLineType(again) == again);
+  CHECK_FALSE(graphic.isLineTypeRemoved(QStringLiteral("VENDOR_TAB")));
+
+  REQUIRE(exportAs(graphic, out));
+  CHECK(ltypeRecordsSpelt(out, "VENDOR_TAB") == Records{{20.0, -10.0}});
+  CHECK(ltypeRecordGroupValues(out, "VENDOR_TAB", "3") ==
+        std::vector<std::string>{"Wider tab marks"});
+  CHECK(ltypeRecordsSpelt(out, "VENDOR_DOT") == Records{{0.0, -5.0}});
+
+  std::filesystem::remove(out);
+}
+
+TEST_CASE("DXF writes no twin record of a removed line type",
+          "[dxf][roundtrip][filter][linetype][named][table]") {
+  ensureSettings();
+  const std::string out = tmpFile("removed_twin_out.dxf");
+  RS_Graphic graphic;
+  importRecords(graphic, ltypeRecord("VENDOR_TAB", {10.0, -5.0}) +
+                            ltypeRecord(" VENDOR_TAB", {7.0, -7.0}) +
+                            ltypeRecord("VENDOR_DOT", {0.0, -5.0}));
+  REQUIRE(graphic.removeLineType(QStringLiteral("VENDOR_TAB")));
+
+  REQUIRE(exportAs(graphic, out));
+  CHECK(ltypeRecordsSpelt(out, "VENDOR_TAB").empty());
+  CHECK(ltypeRecordsSpelt(out, " VENDOR_TAB").empty());
+  CHECK(ltypeRecordsSpelt(out, "VENDOR_DOT") == Records{{0.0, -5.0}});
+
+  std::filesystem::remove(out);
+}
+
 // A record that only names a line type is written with the dashes the list
 // has for it, which a library insert may have brought. The record keeps
 // everything else it came with.

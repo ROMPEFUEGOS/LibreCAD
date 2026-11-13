@@ -53,6 +53,15 @@ public:
     LC_LineType* find(const QString& name) const;
     /// takes ownership; returns the entry that holds the key afterwards
     LC_LineType* add(LC_LineType* entry);
+    /// whether a file may not replace this name: a built-in's own spelling
+    static bool isBuiltInName(const QString& name);
+    /// deletes the entry; refuses a missing name and a built-in
+    bool remove(const QString& name);
+    /// renames the entry; refuses a missing or built-in name, an invalid or
+    /// held new name, and a change of spelling only
+    bool rename(const QString& oldName, const QString& newName);
+    /// whether the program removed this name and holds none of it now
+    bool isRemoved(const QString& name) const;
     /// copies the entries of another list whose key this one lacks, but no
     /// built-in; an entry here without dashes takes those of its twin there
     void merge(const LC_LineTypeList& source);

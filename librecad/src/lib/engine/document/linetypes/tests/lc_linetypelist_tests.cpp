@@ -788,3 +788,108 @@ TEST_CASE("LC_LineTypeList::merge by name copies the definitions the names find"
     CHECK_FALSE(destination.isModified());
     CHECK(destination.count() == 38);
 }
+
+TEST_CASE("LC_LineTypeList::remove deletes an entry and refuses a name it lacks",
+          "[linetype][list][remove]") {
+    int live = 0;
+    {
+        LC_LineTypeList list;
+        auto* vendor = new CountedLineType(QStringLiteral("VENDOR_TAB"), live);
+        vendor->pattern = {10.0, -5.0};
+        REQUIRE(list.add(vendor) == vendor);
+        REQUIRE(live == 1);
+        list.setModified(false);
+
+        CHECK(list.remove(QStringLiteral(" vendor_tab ")));
+        CHECK(list.find(QStringLiteral("VENDOR_TAB")) == nullptr);
+        CHECK(live == 0);
+        CHECK(list.isModified());
+        CHECK(list.isRemoved(QStringLiteral("VENDOR_TAB")));
+
+        list.setModified(false);
+        CHECK_FALSE(list.remove(QStringLiteral("VENDOR_TAB")));
+        CHECK_FALSE(list.remove(QStringLiteral("VENDOR_MISSING")));
+        CHECK_FALSE(list.isModified());
+        CHECK(list.count() == 35);
+    }
+    CHECK(live == 0);
+}
+
+TEST_CASE("LC_LineTypeList::remove refuses a built-in name",
+          "[linetype][list][remove]") {
+    LC_LineTypeList list;
+    list.setModified(false);
+    for (const char* name : {"DASHED", "dashed", "BYLAYER", "ByBlock", "CONTINUOUS"}) {
+        INFO("name " << name);
+        CHECK_FALSE(list.remove(QString::fromUtf8(name)));
+    }
+    CHECK(list.count() == 35);
+    CHECK_FALSE(list.isModified());
+    CHECK_FALSE(list.isRemoved(QStringLiteral("DASHED")));
+}
+
+TEST_CASE("LC_LineTypeList::rename renames an entry and records the old key",
+          "[linetype][list][rename]") {
+    LC_LineTypeList list;
+    auto* vendor = makeRecord(QStringLiteral("VENDOR_TAB"), {10.0, -5.0},
+                              QStringLiteral("Tab marks"));
+    REQUIRE(list.add(vendor) == vendor);
+    list.setModified(false);
+
+    CHECK(list.rename(QStringLiteral(" vendor_tab "), QStringLiteral(" VENDOR_LONG ")));
+    CHECK(vendor->name == "VENDOR_LONG");
+    CHECK(vendor->pattern == std::vector<double>{10.0, -5.0});
+    CHECK(vendor->description == "Tab marks");
+    CHECK_FALSE(vendor->hasImportedRecord);
+    CHECK(list.isModified());
+    CHECK(list.find(QStringLiteral("VENDOR_TAB")) == nullptr);
+    CHECK(list.find(QStringLiteral("VENDOR_LONG")) == vendor);
+    CHECK(list.isRemoved(QStringLiteral("VENDOR_TAB")));
+    CHECK_FALSE(list.isRemoved(QStringLiteral("VENDOR_LONG")));
+    CHECK(list.count() == 36);
+}
+
+TEST_CASE("LC_LineTypeList::rename refuses a name it may not take",
+          "[linetype][list][rename]") {
+    LC_LineTypeList list;
+    auto* vendor = makeRecord(QStringLiteral("VENDOR_TAB"), {10.0, -5.0});
+    auto* other = makeRecord(QStringLiteral("VENDOR_OTHER"), {2.0, -2.0});
+    REQUIRE(list.add(vendor) == vendor);
+    REQUIRE(list.add(other) == other);
+    list.setModified(false);
+
+    CHECK_FALSE(list.rename(QStringLiteral("VENDOR_MISSING"), QStringLiteral("VENDOR_LONG")));
+    CHECK_FALSE(list.rename(QStringLiteral("DASHED"), QStringLiteral("VENDOR_LONG")));
+    CHECK_FALSE(list.rename(QStringLiteral("VENDOR_TAB"), QStringLiteral("HIDDEN")));
+    CHECK_FALSE(list.rename(QStringLiteral("VENDOR_TAB"), QString()));
+    CHECK_FALSE(list.rename(QStringLiteral("VENDOR_TAB"), QStringLiteral("VENDOR:TAB")));
+    CHECK_FALSE(list.rename(QStringLiteral("VENDOR_TAB"), QStringLiteral("vendor_other")));
+    CHECK_FALSE(list.rename(QStringLiteral("VENDOR_TAB"), QStringLiteral("vendor_tab")));
+    CHECK_FALSE(list.rename(QStringLiteral("VENDOR_TAB"), QStringLiteral(" VENDOR_TAB ")));
+    CHECK(vendor->name == "VENDOR_TAB");
+    CHECK(vendor->hasImportedRecord);
+    CHECK_FALSE(list.isModified());
+    CHECK_FALSE(list.isRemoved(QStringLiteral("VENDOR_TAB")));
+    CHECK(list.count() == 37);
+}
+
+TEST_CASE("LC_LineTypeList::isRemoved follows a new entry and clear",
+          "[linetype][list][remove]") {
+    LC_LineTypeList list;
+    REQUIRE(list.add(makeRecord(QStringLiteral("VENDOR_TAB"), {10.0, -5.0})) != nullptr);
+    REQUIRE(list.remove(QStringLiteral("VENDOR_TAB")));
+    CHECK(list.isRemoved(QStringLiteral(" vendor_tab ")));
+    // A name removed and created again is the table's.
+    LC_LineType* again = list.add(makeRecord(QStringLiteral("VENDOR_TAB"), {20.0, -10.0}));
+    REQUIRE(again != nullptr);
+    CHECK_FALSE(list.isRemoved(QStringLiteral("VENDOR_TAB")));
+    // A rename records the old key only.
+    REQUIRE(list.rename(QStringLiteral("VENDOR_TAB"), QStringLiteral("VENDOR_LONG")));
+    CHECK(list.isRemoved(QStringLiteral("VENDOR_TAB")));
+    CHECK_FALSE(list.isRemoved(QStringLiteral("VENDOR_LONG")));
+    // clear() is a clean document.
+    list.clear();
+    CHECK_FALSE(list.isRemoved(QStringLiteral("VENDOR_TAB")));
+    CHECK_FALSE(list.isRemoved(QStringLiteral("VENDOR_LONG")));
+    CHECK(list.count() == 35);
+}

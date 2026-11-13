@@ -193,6 +193,13 @@ public:
     unsigned countLineTypes() const {return m_lineTypeList.count();}
     LC_LineType* lineTypeAt(const unsigned i) const {return m_lineTypeList.at(i);}
     LC_LineType* addLineType(LC_LineType* lineType) {return m_lineTypeList.add(lineType);}
+    bool removeLineType(const QString& name) {return m_lineTypeList.remove(name);}
+    bool renameLineType(const QString& oldName, const QString& newName) {
+        return m_lineTypeList.rename(oldName, newName);
+    }
+    bool isLineTypeRemoved(const QString& name) const {
+        return m_lineTypeList.isRemoved(name);
+    }
     LC_LineType* findLineType(const QString& name) const {return m_lineTypeList.find(name);}
     const LC_LineTypeList& getLineTypeList() const {return m_lineTypeList;}
     void mergeLineTypes(const RS_Graphic& source) {m_lineTypeList.merge(source.m_lineTypeList);}
