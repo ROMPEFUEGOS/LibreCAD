@@ -27,6 +27,7 @@
 #include <QMessageBox>
 #include <QPainter>
 #include <QScrollBar>
+#include <QString>
 #include <QStyleHints>
 #include <QStyledItemDelegate>
 #include <QTimer>
@@ -49,6 +50,15 @@
 #include "rs_selection.h"
 
 class QTableView;
+
+// The palette holds built-in line types only, and the enum of a drawing's line
+// type is a stand-in for it. So this pen's enum names its line type only when
+// the effective names agree.
+static bool builtInRowNamesLineType(const RS_Pen& pen) {
+    RS_Pen builtInPen;
+    builtInPen.setLineType(pen.getLineType());
+    return builtInPen.getEffectiveLineTypeName() == pen.getEffectiveLineTypeName();
+}
 
 /**
  * Delegate used to paint underline lines for table grid
@@ -730,6 +740,16 @@ void LC_PenPaletteWidget::doSelectEntitiesThatMatchToPenAttributes(const RS2::Li
         return;
     }
     const auto graphic = m_graphicView->getGraphic(true);
+
+    // A drawing's line type shares an enum with a built-in but not its name, so
+    // the match compares the names. The target built-in's name is fixed here.
+    QString targetLineTypeName;
+    if (lineType != RS2::LineTypeUnchanged) {
+        RS_Pen targetPen;
+        targetPen.setLineType(lineType);
+        targetLineTypeName = targetPen.getEffectiveLineTypeName();
+    }
+
     int selectedCount = 0;
     bool hasEntitiesOnFrozenLayers = false;
     bool hasEntitiesOnLockedLayers = false;
@@ -742,7 +762,7 @@ void LC_PenPaletteWidget::doSelectEntitiesThatMatchToPenAttributes(const RS2::Li
 
         if (lineType != RS2::LineTypeUnchanged) {
             // test linetype match only if target line type is not "unchanged" (which means "any")
-            if (pen.getLineType() != lineType) {
+            if (pen.getEffectiveLineTypeName() != targetLineTypeName) {
                 continue;
             }
         }
@@ -1255,7 +1275,9 @@ void LC_PenPaletteWidget::doFillPenEditorByPen(const RS_Pen& pen) {
     lePenName->setText("");
     const RS_Color color = pen.getColor();
     const RS2::LineWidth width = pen.getWidth();
-    const RS2::LineType lineType = pen.getLineType();
+    // A drawing's line type has no built-in row, so leave "unchanged": applying
+    // the editor then keeps the pen's own name instead of its stand-in enum.
+    const RS2::LineType lineType = builtInRowNamesLineType(pen) ? pen.getLineType() : RS2::LineTypeUnchanged;
     doUpdatePenEditorByPenAttributes(color, width, lineType);
 }
 
