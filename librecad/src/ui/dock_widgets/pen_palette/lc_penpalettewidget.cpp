@@ -569,6 +569,8 @@ void LC_PenPaletteWidget::doApplyPenAttributesToSelection(RS2::LineType lineType
                                         data.changeWidth = width != RS2::WidthUnchanged;
                                         data.changeLayer = false;
                                         RS_Modification::changeAttributes(selectedEntities, data, ctx);
+                                        // The clones already carry the edited pen and keep their own layer.
+                                        ctx.dontSetActiveLayerAndPen();
                                         return true;
                                     }, [](const LC_DocumentModificationBatch& ctx, RS_Document* d)-> void {
                                         d->select(ctx.entitiesToAdd);
