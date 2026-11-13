@@ -27,6 +27,7 @@
 #include "lc_propertymatchtypedescriptor.h"
 #include "rs.h"
 #include "rs_color.h"
+#include "rs_pen.h"
 
 class RS_Layer;
 class LC_DimStyle;
@@ -37,6 +38,9 @@ struct LC_PropertyMatcherTypes {
     using TLAYER = LC_TypedPropertyMatchTypeDescriptor<RS_Layer*>;
     using TLINE_WIDTH = LC_TypedPropertyMatchTypeDescriptor<RS2::LineWidth>;
     using TLINE_TYPE = LC_TypedPropertyMatchTypeDescriptor<RS2::LineType>;
+    /// Line type properties compare pens by effective name, because an enum
+    /// cannot name a line type the drawing defines.
+    using TLINE_TYPE_PEN = LC_TypedPropertyMatchTypeDescriptor<RS_Pen>;
     using TDOUBLE = LC_TypedPropertyMatchTypeDescriptor<double>;
     using TDOUBLE_QLIST = LC_ComparingPropertyMatchTypeDescriptor<QList<double>, double>;
     using TDOUBLE_IN_VECT =  LC_ComparingPropertyMatchTypeDescriptor<std::vector<double>, double>;
@@ -52,6 +56,8 @@ struct LC_PropertyMatcherTypes {
     static const TLINE_WIDTH LINE_WIDTH_RESOLVED;
     static const TLINE_TYPE LINE_TYPE;
     static const TLINE_TYPE LINE_TYPE_RESOLVED;
+    static const TLINE_TYPE_PEN LINE_TYPE_PEN;
+    static const TLINE_TYPE_PEN LINE_TYPE_RESOLVED_PEN;
     static const TDOUBLE COORD_X;
     static const TDOUBLE_QLIST COORD_X_IN_QLIST;
     static const TDOUBLE  COORD_Y;

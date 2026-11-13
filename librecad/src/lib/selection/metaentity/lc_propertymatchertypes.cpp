@@ -105,6 +105,27 @@ namespace {
         return result;
     }
 
+    LC_TypedPropertyMatchTypeDescriptor<RS_Pen> initLineTypePen(const LC_PropertyMatchTypeEnum type) {
+        LC_TypedPropertyMatchTypeDescriptor<RS_Pen> result(type);
+        result.hasBasic();
+
+        // A pen that names a drawing line type keeps that name, while its enum
+        // stays the nearest built-in. The effective name is what the user chose.
+        result.funEquals = [](const RS_Pen& one, const RS_Pen& second,
+                              [[maybe_unused]] const RS_Pen& tolerance)-> bool {
+            return one.getEffectiveLineTypeName() == second.getEffectiveLineTypeName();
+        };
+        result.funNotEquals = [](const RS_Pen& one, const RS_Pen& second,
+                                 [[maybe_unused]] const RS_Pen& tolerance)-> bool {
+            return one.getEffectiveLineTypeName() != second.getEffectiveLineTypeName();
+        };
+        result.funAny = []([[maybe_unused]] RS_Pen& one, [[maybe_unused]] const RS_Pen& second,
+                           [[maybe_unused]] const RS_Pen& tolerance)-> bool {
+            return true;
+        };
+        return result;
+    }
+
     LC_TypedPropertyMatchTypeDescriptor<double> initAngleType() {
         LC_TypedPropertyMatchTypeDescriptor<double> result(ENTITY_PROPERTY_ANGLE);
 
@@ -374,6 +395,8 @@ const LC_PropertyMatcherTypes::TLINE_WIDTH LC_PropertyMatcherTypes::LINE_WIDTH =
 const LC_PropertyMatcherTypes::TLINE_WIDTH LC_PropertyMatcherTypes::LINE_WIDTH_RESOLVED = initLineWidthType(ENTITY_PROPERTY_LINEWIDTH_RESOLVED);
 const LC_PropertyMatcherTypes::TLINE_TYPE LC_PropertyMatcherTypes::LINE_TYPE = initLineType(ENTITY_PROPERTY_LINETYPE);
 const LC_PropertyMatcherTypes::TLINE_TYPE LC_PropertyMatcherTypes::LINE_TYPE_RESOLVED = initLineType(ENTITY_PROPERTY_LINETYPE_RESOLVED);
+const LC_PropertyMatcherTypes::TLINE_TYPE_PEN LC_PropertyMatcherTypes::LINE_TYPE_PEN = initLineTypePen(ENTITY_PROPERTY_LINETYPE);
+const LC_PropertyMatcherTypes::TLINE_TYPE_PEN LC_PropertyMatcherTypes::LINE_TYPE_RESOLVED_PEN = initLineTypePen(ENTITY_PROPERTY_LINETYPE_RESOLVED);
 const LC_PropertyMatcherTypes::TDOUBLE  LC_PropertyMatcherTypes::COORD_X = initCoordType(ENTITY_PROPERTY_COORD_X);
 const LC_PropertyMatcherTypes::TDOUBLE LC_PropertyMatcherTypes::COORD_Y = initCoordType(ENTITY_PROPERTY_COORD_Y);
 const LC_PropertyMatcherTypes::TDOUBLE LC_PropertyMatcherTypes::ANGLE = initAngleType();

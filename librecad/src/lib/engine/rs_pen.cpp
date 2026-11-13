@@ -115,7 +115,9 @@ QString RS_Pen::getLineTypeName() const {
 }
 
 QString RS_Pen::getEffectiveLineTypeName() const {
-    return LC_LineTypeNames::lineTypeToName(getLineType());
+    // Spellings that differ only in case or Unicode form are one line type,
+    // as the combo's row lookup already treats them.
+    return LC_LineTypeNames::foldName(getLineTypeName());
 }
 
 std::ostream& operator << (std::ostream& os, const RS_Pen& p) {

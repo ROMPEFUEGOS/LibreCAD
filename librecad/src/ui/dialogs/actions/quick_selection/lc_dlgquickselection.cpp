@@ -28,9 +28,11 @@
 #include "lc_convert.h"
 #include "lc_entitymatchdescriptorsregistry.h"
 #include "lc_entitymetauiutils.h"
+#include "qg_linetypebox.h"
 #include "rs_document.h"
 #include "rs_graphic.h"
 #include "rs_math.h"
+#include "rs_pen.h"
 #include "rs_selection.h"
 #include "rs_settings.h"
 #include "ui_lc_dlgquickselection.h"
@@ -71,14 +73,19 @@ LC_DlgQuickSelection::LC_DlgQuickSelection(QWidget* parent, LC_ActionContext* ac
 
     ui->cbValueColor->init(true, false);
     ui->cbLineWidth->init(true, false);
-    ui->cbLineType->init(true, false);
 
     ui->cbValueColorResolved->init(false, false);
     ui->cbLineWidthResolved->init(false, false);
-    ui->cbLineTypeResolved->init(false, false);
 
-    const auto layerList = m_document->getGraphic()->getLayerList();
+    const auto graphic = m_document->getGraphic();
+    const auto layerList = graphic->getLayerList();
     ui->cbValueLayer->init(*layerList, false, false);
+
+    // The drawing decides which line types a user can pick, including ones it
+    // defines itself beside the built-in rows.
+    const auto lineTypeList = &graphic->getLineTypeList();
+    ui->cbLineType->init(lineTypeList, true, false);
+    ui->cbLineTypeResolved->init(lineTypeList, false, false);
 
     if (interactiveInputType != LC_ActionContext::InteractiveInputInfo::NOTNEEDED) {
         restoreFromSavedState(savedState, interactiveInputType, interactiveInputValue1, interactiveInputValue2);
@@ -275,13 +282,15 @@ LC_EntityMatcher* LC_DlgQuickSelection::obtainEntityMatcher() const {
         }
         case ENTITY_PROPERTY_LINETYPE:
         case ENTITY_PROPERTY_LINETYPE_RESOLVED: {
-            auto* typedMatcher = static_cast<LC_GenericEntityMatcher<RS2::LineType>*>(m_propertyDescriptor->createMatcher());
-            RS2::LineType valueToMatch;
+            auto* typedMatcher = static_cast<LC_GenericEntityMatcher<RS_Pen>*>(m_propertyDescriptor->createMatcher());
+            // The row writes a pen, so a drawing line type keeps its name and
+            // the matcher compares names rather than the derived enum.
+            RS_Pen valueToMatch;
             if (propertyType == ENTITY_PROPERTY_LINETYPE) {
-                valueToMatch = ui->cbLineType->getLineType();
+                ui->cbLineType->applyLineTypeTo(valueToMatch);
             }
             else {
-                valueToMatch = ui->cbLineTypeResolved->getLineType();
+                ui->cbLineTypeResolved->applyLineTypeTo(valueToMatch);
             }
             typedMatcher->update(valueToMatch, valueToMatch, operatorType);
             return typedMatcher;

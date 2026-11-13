@@ -62,17 +62,13 @@ static void initCommonEntityAttributesProperties(LC_TypedEntityMatchDescriptor<E
         return linewidth;
     }, tr("Line Width (Resolved)"), tr("Resolved width of line that is used when entity is drawn"), LC_PropertyMatcherTypes::LINE_WIDTH_RESOLVED);
 
-    entity->template add<RS2::LineType>("lineType", [](const RS_Entity* e) {
-        const RS_Pen pen = e->getPen(false);
-        RS2::LineType lineType = pen.getLineType();
-        return lineType;
-    }, tr("Line Type"), tr("Type of line attribute stored in the entity"), LC_PropertyMatcherTypes::LINE_TYPE);
+    entity->template add<RS_Pen>("lineType", [](const RS_Entity* e) {
+        return e->getPen(false);
+    }, tr("Line Type"), tr("Type of line attribute stored in the entity"), LC_PropertyMatcherTypes::LINE_TYPE_PEN);
 
-    entity->template add<RS2::LineType>("lineTypeR", [](const RS_Entity* e) {
-        const RS_Pen pen = e->getPen(true);
-        RS2::LineType lineType = pen.getLineType();
-        return lineType;
-    }, tr("Line Type (Resolved)"), tr("Resolved type of line that is used when entity is drawn"), LC_PropertyMatcherTypes::LINE_TYPE_RESOLVED);
+    entity->template add<RS_Pen>("lineTypeR", [](const RS_Entity* e) {
+        return e->getPen(true);
+    }, tr("Line Type (Resolved)"), tr("Resolved type of line that is used when entity is drawn"), LC_PropertyMatcherTypes::LINE_TYPE_RESOLVED_PEN);
 }
 };
 
