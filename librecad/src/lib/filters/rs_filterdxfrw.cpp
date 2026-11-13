@@ -19907,6 +19907,11 @@ void RS_FilterDXFRW::writeLTypes() {
       dashedNames.insert(listed);
   }
   for (const auto &entry : records) {
+    // The archive keeps every record the file had, and the table is what the
+    // drawing holds now: a removed name takes its records, twins included.
+    if (m_graphic->isLineTypeRemoved(
+            QString::fromUtf8(entry.first.c_str())))
+      continue;
     if (!emittedNames.insert(normalizeDwgTableName(entry.first)).second)
       continue;
     DRW_LType ltype = entry.second;

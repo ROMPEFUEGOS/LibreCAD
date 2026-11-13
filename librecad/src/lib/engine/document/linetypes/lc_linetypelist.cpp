@@ -89,6 +89,7 @@ void LC_LineTypeList::seedBuiltins() {
 void LC_LineTypeList::clear() {
     qDeleteAll(m_entries);
     m_entries.clear();
+    m_removedKeys.clear();
     seedBuiltins();
     setModified(true);
 }
@@ -120,25 +121,58 @@ bool LC_LineTypeList::isBuiltInName(const QString& name) {
 }
 
 bool LC_LineTypeList::remove(const QString& name) {
-    (void)name;
-    return false;
+    const QString trimmed = name.trimmed();
+    if (isBuiltInName(trimmed)) {
+        return false;
+    }
+    LC_LineType* entry = find(trimmed);
+    if (entry == nullptr) {
+        return false;
+    }
+    m_removedKeys.insert(entry->key());
+    m_entries.removeOne(entry);
+    delete entry;
+    setModified(true);
+    return true;
 }
 
 bool LC_LineTypeList::rename(const QString& oldName, const QString& newName) {
-    (void)oldName;
-    (void)newName;
-    return false;
+    const QString oldTrimmed = oldName.trimmed();
+    if (isBuiltInName(oldTrimmed)) {
+        return false;
+    }
+    LC_LineType* entry = find(oldTrimmed);
+    if (entry == nullptr) {
+        return false;
+    }
+    const QString trimmed = newName.trimmed();
+    if (isBuiltInName(trimmed) ||
+        LC_LineType::checkName(trimmed) != LC_LineType::NameCheck::Ok) {
+        return false;
+    }
+    // The entry itself holds a spelling-only key; any other holder is a twin.
+    if (find(trimmed) != nullptr) {
+        return false;
+    }
+    m_removedKeys.insert(entry->key());
+    entry->name = trimmed;
+    // No archived record carries the new name.
+    entry->hasImportedRecord = false;
+    setModified(true);
+    return true;
 }
 
 bool LC_LineTypeList::isRemoved(const QString& name) const {
-    (void)name;
-    return false;
+    const QString key = LC_LineTypeNames::foldName(name.trimmed());
+    return m_removedKeys.contains(key) && find(key) == nullptr;
 }
 
 LC_LineType* LC_LineTypeList::add(LC_LineType* entry) {
     if (entry == nullptr || m_entries.contains(entry)) {
         return entry;
     }
+    // the name is the drawing's again, so no record of it stays removed
+    m_removedKeys.remove(entry->key());
     LC_LineType* existing = find(entry->name);
     if (existing == nullptr) {
         m_entries.append(entry);

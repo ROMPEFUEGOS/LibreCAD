@@ -24,6 +24,7 @@
 #define LC_LINETYPELIST_H
 
 #include <QList>
+#include <QSet>
 
 #include "lc_linetype.h"
 
@@ -88,6 +89,8 @@ private:
     void take(const LC_LineType* incoming);
 
     QList<LC_LineType*> m_entries;
+    /// keys the program removed; add() forgets one that comes back
+    QSet<QString> m_removedKeys;
     bool m_modified = false;
 };
 
