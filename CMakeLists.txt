@@ -2837,6 +2837,7 @@ if (BUILD_TESTS)
         librecad/src/ui/dock_widgets/command_line/tests/qg_commandwidget_tests.cpp
         librecad/src/ui/dock_widgets/layer_widget/tests/lc_layerblockwidgets_tests.cpp
         librecad/src/ui/dock_widgets/layer_widget/tests/lc_activelayerdocks_tests.cpp
+        librecad/src/ui/dock_widgets/pen_palette/tests/lc_penpalette_apply_tests.cpp
         librecad/src/ui/dock_widgets/ucs_list/tests/lc_ucsviewsselectiondocks_tests.cpp
         librecad/src/ui/dock_widgets/property_sheet/tests/lc_propertysheetlifetime_tests.cpp
         librecad/src/ui/dock_widgets/property_sheet/tests/lc_layerstateproperties_tests.cpp
